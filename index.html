@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>ベビーモニター（LAN限定 / 1ファイル / QR）</title>
+  <title>ベビーモニター（LAN限定 / 1ファイル / QRのみ）</title>
 
   <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -18,8 +18,6 @@
     body { -webkit-tap-highlight-color: transparent; }
     video { background:#000; }
     .night { filter: brightness(1.9) contrast(1.45) saturate(0.85); }
-    .glass { backdrop-filter: blur(10px); }
-    .hidden-soft { display:none !important; }
   </style>
 </head>
 
@@ -28,7 +26,7 @@
     <!-- Header -->
     <header class="space-y-2">
       <div class="flex items-center justify-between gap-2 flex-wrap">
-        <div class="text-xl font-black">ベビーモニター（同じWi-Fi内 / 1ファイル / QR）</div>
+        <div class="text-xl font-black">ベビーモニター（同じWi-Fi内 / QRのみ / 1ファイル）</div>
         <div class="text-xs font-bold px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
           LAN限定（外部接続不可想定）
         </div>
@@ -39,16 +37,16 @@
       </div>
     </header>
 
-    <!-- Mode & Password -->
+    <!-- Mode -->
     <section class="bg-white rounded-3xl border border-slate-200 p-4 space-y-4 shadow-sm">
       <div class="flex items-center justify-between gap-3 flex-wrap">
-        <div class="font-black text-slate-700">0）モードとパスワード</div>
-        <div class="text-xs text-slate-500">同じパスワードでのみ復号・接続できます</div>
+        <div class="font-black text-slate-700">0）モード選択</div>
+        <div class="text-xs text-slate-500">パスワード不要／QRだけで接続</div>
       </div>
 
       <div class="grid md:grid-cols-2 gap-3">
         <div class="bg-slate-50 rounded-2xl p-3 border border-slate-200">
-          <div class="text-sm font-bold text-slate-700 mb-2">モード選択</div>
+          <div class="text-sm font-bold text-slate-700 mb-2">モード</div>
           <div class="grid grid-cols-2 gap-2">
             <button id="btnModeSend" class="px-3 py-3 rounded-2xl font-black border border-slate-200 bg-white hover:bg-slate-100 active:scale-[0.99]">
               👶 送信（ベビー側）
@@ -63,24 +61,14 @@
         </div>
 
         <div class="bg-slate-50 rounded-2xl p-3 border border-slate-200 space-y-2">
-          <div class="flex items-center justify-between">
-            <div class="text-sm font-bold text-slate-700">パスワード</div>
-            <button id="btnTogglePw" class="text-xs font-bold px-3 py-1 rounded-full bg-white border border-slate-200 active:scale-[0.99]">表示</button>
+          <div class="text-sm font-bold text-slate-700">状態</div>
+          <div class="text-sm">
+            <span class="text-slate-500">現在：</span><span id="globalState" class="font-black text-slate-700">待機中</span>
           </div>
-          <input id="pw" type="password" class="w-full rounded-2xl border border-slate-200 px-4 py-3 font-bold"
-                 placeholder="両端末で同じパスワードを入力" />
           <div class="text-xs text-slate-500">
-            Offer/Answerは暗号化されます（サーバ不要）。※QR表示のみ運用でもOK
+            ヒント：<span id="uaHint"></span><br/>
+            ※iPhone/iPadは受信側で「▶再生」を押すと安定します。
           </div>
-        </div>
-      </div>
-
-      <div class="flex items-center justify-between gap-2 flex-wrap">
-        <div class="text-sm">
-          状態：<span id="globalState" class="font-black text-slate-700">待機中</span>
-        </div>
-        <div class="text-xs text-slate-500">
-          ヒント：<span id="uaHint"></span>
         </div>
       </div>
     </section>
@@ -126,43 +114,23 @@
           <!-- Flow -->
           <div class="space-y-3">
             <div class="bg-indigo-50 border border-indigo-200 rounded-2xl p-3 text-sm">
-              <div class="font-black text-indigo-900">1）Offerを作成 → QRをすぐ表示</div>
-              <div class="text-indigo-700 text-xs mt-1">テキストは表示しません（裏で保持）</div>
-              <div class="mt-2 flex gap-2 flex-wrap">
-                <button id="btnMakeOffer" class="px-4 py-3 rounded-2xl bg-indigo-600 text-white font-black active:scale-[0.99]" disabled>
-                  Offer作成 → QR表示
+              <div class="font-black text-indigo-900">1）OfferのQRを表示</div>
+              <div class="text-indigo-700 text-xs mt-1">押すとすぐQR画面が出ます（裏でOffer生成）</div>
+              <div class="mt-2">
+                <button id="btnShowOfferQRNow" class="w-full px-4 py-4 rounded-3xl bg-indigo-600 text-white font-black text-base active:scale-[0.99]" disabled>
+                  📷 Offer QR を表示する
                 </button>
               </div>
-
-              <!-- 手動の予備（通常は不要） -->
-              <details class="mt-3">
-                <summary class="cursor-pointer text-xs font-black text-indigo-700">予備：テキスト確認/コピー（困ったときだけ）</summary>
-                <div class="mt-2 space-y-2">
-                  <button id="btnCopyOffer" class="px-4 py-2 rounded-2xl bg-slate-200 font-black active:scale-[0.99]" disabled>コピー</button>
-                  <textarea id="offerOut" class="w-full h-24 rounded-2xl border border-indigo-200 p-3 text-[11px] font-mono"
-                            placeholder="Offer（暗号化済み）" readonly></textarea>
-                </div>
-              </details>
             </div>
 
             <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 text-sm">
-              <div class="font-black text-emerald-900">2）AnswerをQRで読む → 自動で接続</div>
-              <div class="text-emerald-700 text-xs mt-1">読み取り完了後、こちらで自動接続します</div>
-              <div class="mt-2 flex gap-2 flex-wrap">
-                <button id="btnScanAnswerQR" class="px-4 py-3 rounded-2xl border border-emerald-200 bg-white font-black active:scale-[0.99]" disabled>
-                  📷 AnswerをQR読取 → 自動接続
+              <div class="font-black text-emerald-900">2）Answerを読み取ると自動接続</div>
+              <div class="text-emerald-700 text-xs mt-1">受信側が返したAnswerのQRを読み取ります</div>
+              <div class="mt-2">
+                <button id="btnScanAnswerQR" class="w-full px-4 py-4 rounded-3xl border border-emerald-200 bg-white font-black text-base active:scale-[0.99]" disabled>
+                  📷 Answer QR を読取 → 自動接続
                 </button>
               </div>
-
-              <!-- 手動の予備（通常は不要） -->
-              <details class="mt-3">
-                <summary class="cursor-pointer text-xs font-black text-emerald-700">予備：手動貼付→接続（困ったときだけ）</summary>
-                <div class="mt-2 space-y-2">
-                  <textarea id="answerIn" class="w-full h-24 rounded-2xl border border-emerald-200 p-3 text-[11px] font-mono"
-                            placeholder="Answer（暗号化済み）を貼り付け"></textarea>
-                  <button id="btnConnectSend" class="px-4 py-2 rounded-2xl bg-emerald-600 text-white font-black active:scale-[0.99]">接続</button>
-                </div>
-              </details>
             </div>
 
             <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-sm">
@@ -189,46 +157,19 @@
           <!-- Offer/Answer -->
           <div class="space-y-2">
             <div class="bg-indigo-50 border border-indigo-200 rounded-2xl p-3 text-sm">
-              <div class="font-black text-indigo-900">1）OfferをQRで読む → Answerを自動作成</div>
-              <div class="text-indigo-700 text-xs mt-1">読み取りが終わると、AnswerのQRが自動で出ます</div>
-              <div class="mt-2 flex gap-2 flex-wrap">
-                <button id="btnScanOfferQR" class="px-4 py-3 rounded-2xl border border-indigo-200 bg-white font-black active:scale-[0.99]">
-                  📷 OfferをQR読取（自動でAnswer作成）
-                </button>
-                <button id="btnMakeAnswer" class="px-4 py-3 rounded-2xl bg-indigo-600 text-white font-black active:scale-[0.99]">
-                  （予備）Answer作成
+              <div class="font-black text-indigo-900">1）Offerを読取 → AnswerのQRを自動表示</div>
+              <div class="text-indigo-700 text-xs mt-1">ボタンを押して、送信側のOffer QRを読み取るだけ</div>
+              <div class="mt-2">
+                <button id="btnScanOfferQR" class="w-full px-4 py-4 rounded-3xl border border-indigo-200 bg-white font-black text-base active:scale-[0.99]">
+                  📷 Offer QR を読取（自動でAnswer表示）
                 </button>
               </div>
-
-              <!-- 手動の予備（通常は不要） -->
-              <details class="mt-3">
-                <summary class="cursor-pointer text-xs font-black text-indigo-700">予備：Offerテキスト貼付（困ったときだけ）</summary>
-                <div class="mt-2 space-y-2">
-                  <textarea id="offerIn" class="w-full h-24 rounded-2xl border border-indigo-200 p-3 text-[11px] font-mono"
-                            placeholder="Offer（暗号化済み）を貼り付け"></textarea>
-                </div>
-              </details>
-            </div>
-
-            <!-- Answerは“自動でQR表示”するので、ここではテキストを出さない（予備のみ） -->
-            <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 text-sm">
-              <div class="font-black text-emerald-900">2）Answerを返す（QRが自動表示）</div>
-              <div class="text-emerald-700 text-xs mt-1">送信側で「AnswerをQR読取」してください</div>
-
-              <details class="mt-3">
-                <summary class="cursor-pointer text-xs font-black text-emerald-700">予備：Answerテキスト確認/コピー（困ったときだけ）</summary>
-                <div class="mt-2 space-y-2">
-                  <button id="btnCopyAnswer" class="px-4 py-2 rounded-2xl bg-slate-200 font-black active:scale-[0.99]" disabled>コピー</button>
-                  <textarea id="answerOut" class="w-full h-24 rounded-2xl border border-emerald-200 p-3 text-[11px] font-mono"
-                            placeholder="Answer（暗号化済み）" readonly></textarea>
-                </div>
-              </details>
             </div>
 
             <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-sm">
               <div class="font-black text-slate-700">接続状態</div>
               <div class="mt-1 text-sm">Peer：<span id="recvConn" class="font-black">未接続</span></div>
-              <div class="text-xs text-slate-500 mt-1">iPhone/iPadは自動再生制限があるため「再生」を押すと安定します。</div>
+              <div class="text-xs text-slate-500 mt-1">iPhone/iPadは自動再生制限があるため「▶再生」を押すと安定します。</div>
             </div>
           </div>
 
@@ -244,7 +185,7 @@
               <button id="btnPlayRemote" class="px-3 py-2 rounded-2xl bg-emerald-600 text-white font-black active:scale-[0.99]" disabled>▶ 再生</button>
               <button id="btnSpkMute" class="px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold active:scale-[0.99]" disabled>🔈 音：ON</button>
               <button id="btnNightRemote" class="px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold active:scale-[0.99]" disabled>🌙 暗視：OFF</button>
-              <button id="btnFull" class="px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold active:scale-[0.99]" disabled>⛶（代替）</button>
+              <button id="btnFullAlt" class="px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold active:scale-[0.99]" disabled>⛶（代替）</button>
             </div>
 
             <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs text-slate-600">
@@ -260,13 +201,13 @@
     </section>
 
     <div class="text-[11px] text-slate-500 px-1">
-      🔒 Offer/Answerはパスワードで暗号化。パスワードが違うと復号できず、接続できません。
+      ✅ 仕様：パスワードなし／テキスト入力なし。QRの読み取りだけで接続します。
     </div>
   </div>
 
   <!-- QR: Show Modal -->
   <div id="qrModal" class="fixed inset-0 hidden z-50">
-    <div class="absolute inset-0 bg-black/50"></div>
+    <div class="absolute inset-0 bg-black/55"></div>
     <div class="absolute inset-0 flex items-center justify-center p-4">
       <div class="w-full max-w-md bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
         <div class="p-4 border-b border-slate-200 flex items-center justify-between">
@@ -281,12 +222,9 @@
           <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3 flex items-center justify-center">
             <div id="qrBox"></div>
           </div>
-
-          <!-- テキストは基本不要：完全非表示（必要ならdetailsで） -->
-          <details class="hidden-soft">
-            <summary>debug</summary>
-            <textarea id="qrText"></textarea>
-          </details>
+          <div id="qrFoot" class="text-[11px] text-slate-500">
+            ※長い場合は「分割QR」を自動で切り替えて表示します。
+          </div>
         </div>
       </div>
     </div>
@@ -294,7 +232,7 @@
 
   <!-- QR: Scan Modal -->
   <div id="scanModal" class="fixed inset-0 hidden z-50">
-    <div class="absolute inset-0 bg-black/60"></div>
+    <div class="absolute inset-0 bg-black/65"></div>
     <div class="absolute inset-0 flex items-center justify-center p-4">
       <div class="w-full max-w-md bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
         <div class="p-4 border-b border-slate-200 flex items-center justify-between">
@@ -313,8 +251,8 @@
             <button id="btnSwitchCam" class="flex-1 px-3 py-2 rounded-2xl border border-slate-200 bg-white font-black active:scale-[0.99]">
               🔁 カメラ切替
             </button>
-            <button id="btnPasteToTarget" class="flex-1 px-3 py-2 rounded-2xl bg-emerald-600 text-white font-black active:scale-[0.99]">
-              閉じる（手動へ）
+            <button id="btnCloseScan2" class="flex-1 px-3 py-2 rounded-2xl bg-emerald-600 text-white font-black active:scale-[0.99]">
+              閉じる
             </button>
           </div>
           <div class="text-xs text-slate-500">
@@ -336,8 +274,6 @@
   const btnModeRecv = $("btnModeRecv");
   const sendView = $("sendView");
   const recvView = $("recvView");
-  const pwEl = $("pw");
-  const btnTogglePw = $("btnTogglePw");
 
   // Send UI
   const btnStartCam = $("btnStartCam");
@@ -348,28 +284,20 @@
   const btnTorch = $("btnTorch");
   const localVideo = $("localVideo");
   const camInfo = $("camInfo");
-  const btnMakeOffer = $("btnMakeOffer");
-  const btnCopyOffer = $("btnCopyOffer");
-  const offerOut = $("offerOut");
-  const answerIn = $("answerIn");
+  const btnShowOfferQRNow = $("btnShowOfferQRNow");
   const btnScanAnswerQR = $("btnScanAnswerQR");
-  const btnConnectSend = $("btnConnectSend");
   const sendConn = $("sendConn");
   const btnFullLocal = $("btnFullLocal");
 
   // Recv UI
   const btnResetRecv = $("btnResetRecv");
-  const offerIn = $("offerIn");
   const btnScanOfferQR = $("btnScanOfferQR");
-  const btnMakeAnswer = $("btnMakeAnswer");
-  const answerOut = $("answerOut");
-  const btnCopyAnswer = $("btnCopyAnswer");
   const recvConn = $("recvConn");
   const remoteVideo = $("remoteVideo");
   const btnPlayRemote = $("btnPlayRemote");
   const btnSpkMute = $("btnSpkMute");
   const btnNightRemote = $("btnNightRemote");
-  const btnFull = $("btnFull");
+  const btnFullAlt = $("btnFullAlt");
   const btnFullRemote = $("btnFullRemote");
 
   // QR Modals
@@ -385,142 +313,34 @@
   const scanProgress = $("scanProgress");
   const qrReader = $("qrReader");
   const btnCloseScan = $("btnCloseScan");
+  const btnCloseScan2 = $("btnCloseScan2");
   const btnSwitchCam = $("btnSwitchCam");
-  const btnPasteToTarget = $("btnPasteToTarget");
 
   uaHint.textContent = (navigator.userAgent.includes("iPhone") || navigator.userAgent.includes("iPad"))
-    ? "iOS（再生ボタンが必要な場合あり）"
+    ? "iOS（受信側は▶再生が必要な場合あり）"
     : "OK";
 
   // ====== LAN-only WebRTC policy ======
-  // STUN/TURNなし + host候補のみ（外部接続を避ける意図）
+  // STUN/TURNなし（外部接続を避ける意図）
   const pcConfig = { iceServers: [] };
-  function isHostCandidate(candStr) { return / typ host /i.test(candStr); }
 
-  // ====== small helpers ======
-  const te = new TextEncoder();
-  const td = new TextDecoder();
-
-  function withTimeout(promise, ms, msg="タイムアウトしました") {
-    let t;
-    const timeout = new Promise((_, rej) => {
-      t = setTimeout(() => rej(new Error(msg)), ms);
-    });
-    return Promise.race([promise, timeout]).finally(() => clearTimeout(t));
+  function isHostCandidateLine(line) {
+    // a=candidate:... typ host ...
+    return / typ host /i.test(line);
   }
 
-  // iOSで大きい配列を ... 展開すると固まることがあるので「分割」方式に変更
-  function b64uEncode(u8) {
-    let binary = "";
-    const CHUNK = 0x8000;
-    for (let i = 0; i < u8.length; i += CHUNK) {
-      binary += String.fromCharCode.apply(null, u8.subarray(i, i + CHUNK));
+  function filterHostCandidatesInSdp(sdp) {
+    const lines = (sdp || "").split(/\r\n|\n/);
+    const kept = [];
+    for (const line of lines) {
+      if (line.startsWith("a=candidate:")) {
+        if (isHostCandidateLine(line)) kept.push(line);
+      } else {
+        kept.push(line);
+      }
     }
-    let s = btoa(binary);
-    return s.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-  }
-  function b64uDecode(s) {
-    s = s.replace(/-/g, "+").replace(/_/g, "/");
-    while (s.length % 4) s += "=";
-    const bin = atob(s);
-    const u8 = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-    return u8;
-  }
-
-  async function deriveKey(pass, saltU8) {
-    // iOSで重くなりすぎないように（LAN用途の“照合”として十分）
-    const ITER = 60000;
-    const baseKey = await crypto.subtle.importKey("raw", te.encode(pass), { name: "PBKDF2" }, false, ["deriveKey"]);
-    return crypto.subtle.deriveKey(
-      { name: "PBKDF2", salt: saltU8, iterations: ITER, hash: "SHA-256" },
-      baseKey,
-      { name: "AES-GCM", length: 256 },
-      false,
-      ["encrypt","decrypt"]
-    );
-  }
-
-  // ===== gzip (if available) : “長いときだけ”使う =====
-  async function gzipCompressMaybe(u8) {
-    // 短い時は圧縮しない（速度優先）
-    if (u8.byteLength < 1400) return { u8, gz: false };
-    if (!("CompressionStream" in window)) return { u8, gz: false };
-    try {
-      const cs = new CompressionStream("gzip");
-      const w = cs.writable.getWriter();
-      await w.write(u8);
-      await w.close();
-      const ab = await new Response(cs.readable).arrayBuffer();
-      return { u8: new Uint8Array(ab), gz: true };
-    } catch {
-      return { u8, gz: false };
-    }
-  }
-
-  async function gzipDecompress(u8) {
-    if (!("DecompressionStream" in window)) return u8;
-    const ds = new DecompressionStream("gzip");
-    const w = ds.writable.getWriter();
-    await w.write(u8);
-    await w.close();
-    const ab = await new Response(ds.readable).arrayBuffer();
-    return new Uint8Array(ab);
-  }
-
-  // v2 / v2g
-  async function encryptJSON(pass, obj) {
-    const plain = te.encode(JSON.stringify(obj));
-    const { u8: maybeCompressed, gz } = await gzipCompressMaybe(plain);
-
-    const salt = crypto.getRandomValues(new Uint8Array(16));
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const key = await deriveKey(pass, salt);
-
-    const cipher = new Uint8Array(
-      await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, maybeCompressed)
-    );
-
-    const prefix = gz ? "v2g" : "v2";
-    return `${prefix}.${b64uEncode(salt)}.${b64uEncode(iv)}.${b64uEncode(cipher)}`;
-  }
-
-  async function decryptJSON(pass, blob) {
-    const parts = (blob || "").trim().split(".");
-    if (parts.length !== 4) throw new Error("形式が不正です");
-
-    const ver = parts[0];
-    const salt = b64uDecode(parts[1]);
-    const iv = b64uDecode(parts[2]);
-    const cipher = b64uDecode(parts[3]);
-
-    const key = await deriveKey(pass, salt);
-    const plainBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, cipher);
-    let u8 = new Uint8Array(plainBuf);
-
-    if (ver === "v2g") u8 = await gzipDecompress(u8);
-    else if (ver !== "v2") throw new Error("バージョン不正です");
-
-    return JSON.parse(td.decode(u8));
-  }
-
-  function mustPw() {
-    const p = (pwEl.value || "").trim();
-    if (p.length < 4) throw new Error("パスワードを入力してください（4文字以上推奨）");
-    return p;
-  }
-
-  async function safeCopy(text) {
-    if (!text) return;
-    try { await navigator.clipboard.writeText(text); }
-    catch {
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      ta.remove();
-    }
+    // SDPはCRLF推奨
+    return kept.join("\r\n").trim() + "\r\n";
   }
 
   // ===== Fullscreen helper =====
@@ -533,15 +353,19 @@
   }
 
   // ===== QR split protocol =====
+  // 1枚に収まらない場合、BM1|<id>|<i>/<n>|<chunk> で分割
   function randId(len = 6) {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     let s = "";
     for (let i = 0; i < len; i++) s += chars[Math.floor(Math.random() * chars.length)];
     return s;
   }
+
   function makeQrSegments(text) {
-    const CHUNK = 850;
-    if ((text || "").length <= CHUNK) return { raw: text, parts: [text] };
+    const CHUNK = 850; // 安全側
+    if ((text || "").length <= CHUNK) {
+      return { raw: text, parts: [text] };
+    }
     const id = randId();
     const n = Math.ceil(text.length / CHUNK);
     const parts = [];
@@ -552,24 +376,39 @@
     return { raw: text, parts };
   }
 
-  // ===== QR: show modal (open immediately, render in next frame) =====
+  function parseBm1(text) {
+    // BM1|id|i/n|chunk
+    if (!text.startsWith("BM1|")) return null;
+    const a = text.split("|");
+    if (a.length < 4) return null;
+    const id = a[1];
+    const frac = a[2];
+    const chunk = a.slice(3).join("|");
+    const m = frac.match(/^(\d+)\/(\d+)$/);
+    if (!m) return null;
+    return { id, i: Number(m[1]), n: Number(m[2]), chunk };
+  }
+
+  // ===== QR modal: “即表示→後からQR描画” にする =====
   let qrParts = [];
   let qrIdx = 0;
   let qrTimer = null;
 
-  function openQR(title, text) {
-    const pack = makeQrSegments(text || "");
-    qrParts = pack.parts;
-    qrIdx = 0;
-
+  function showQrModal(title, meta="") {
     qrTitle.textContent = title;
-    qrMeta.textContent = (qrParts.length <= 1) ? "" : `分割QR：${qrIdx + 1} / ${qrParts.length}（自動切替）`;
+    qrMeta.textContent = meta;
     qrBox.innerHTML = `
       <div class="w-[280px] h-[280px] grid place-items-center">
-        <div class="text-sm font-black text-slate-600">QR生成中…</div>
+        <div class="text-sm font-black text-slate-600">生成中…</div>
       </div>
     `;
     qrModal.classList.remove("hidden");
+  }
+
+  function setQrContent(text) {
+    const pack = makeQrSegments(text || "");
+    qrParts = pack.parts;
+    qrIdx = 0;
 
     const render = (idx) => {
       qrBox.innerHTML = "";
@@ -580,15 +419,15 @@
           height: 280,
           correctLevel: QRCode.CorrectLevel.L
         });
-      } catch (e) {
+      } catch {
         qrBox.innerHTML = `<div class="text-sm font-bold text-rose-600">
-          QR生成に失敗（文字数超過/端末負荷）。予備のテキスト欄を使ってください。
+          QR生成に失敗しました。端末負荷が高い可能性があります（再読み込み→再試行）。
         </div>`;
       }
       qrMeta.textContent = (qrParts.length <= 1) ? "" : `分割QR：${idx + 1} / ${qrParts.length}（自動切替）`;
     };
 
-    requestAnimationFrame(() => render(0));
+    render(0);
 
     if (qrTimer) clearInterval(qrTimer);
     if (qrParts.length > 1) {
@@ -612,25 +451,12 @@
   btnCloseQR.addEventListener("click", closeQR);
   qrModal.addEventListener("click", (e) => { if (e.target === qrModal) closeQR(); });
 
-  // ===== QR: scan modal (collect split parts) =====
+  // ===== QR scan modal (collect split parts) =====
   let html5Qr = null;
-  let scanTarget = null;      // textarea/input（予備用）
-  let scanAfterFill = null;   // 自動処理（Answer作成/自動接続など）
   let scanFacing = "environment";
-  let scanCollect = null;     // { id, total, map }
+  let scanCollect = null; // { id, total, map }
   let scanDone = false;
-
-  function parseBm1(text) {
-    if (!text.startsWith("BM1|")) return null;
-    const a = text.split("|");
-    if (a.length < 4) return null;
-    const id = a[1];
-    const frac = a[2];
-    const chunk = a.slice(3).join("|");
-    const m = frac.match(/^(\d+)\/(\d+)$/);
-    if (!m) return null;
-    return { id, i: Number(m[1]), n: Number(m[2]), chunk };
-  }
+  let scanAfter = null;
 
   function resetScanCollect() {
     scanCollect = null;
@@ -638,23 +464,29 @@
     scanDone = false;
   }
 
+  async function stopScanner() {
+    try {
+      if (html5Qr) {
+        await html5Qr.stop();
+        await html5Qr.clear();
+      }
+    } catch {} finally {
+      html5Qr = null;
+      qrReader.innerHTML = "";
+    }
+  }
+
   async function finishScan(val) {
     if (scanDone) return;
     scanDone = true;
 
-    const cb = scanAfterFill;
-    scanAfterFill = null;
+    const cb = scanAfter;
+    scanAfter = null;
 
-    await stopScanner(true);
+    await stopScanner();
     scanModal.classList.add("hidden");
-
-    // UI値反映（予備欄）
-    if (scanTarget) scanTarget.value = val;
-
-    scanTarget = null;
     resetScanCollect();
 
-    // UIが閉じてから実行（体感“即”にする）
     if (cb) setTimeout(() => cb(val), 0);
   }
 
@@ -688,7 +520,6 @@
     html5Qr = new Html5Qrcode("qrReader");
     scanHint.textContent = "カメラを向けてください（読み取り後、自動で進みます）";
     const config = { fps: 10, qrbox: { width: 240, height: 240 } };
-
     await html5Qr.start(
       { facingMode: scanFacing },
       config,
@@ -697,55 +528,37 @@
     );
   }
 
-  async function stopScanner(silent=false) {
-    try {
-      if (html5Qr) {
-        await html5Qr.stop();
-        await html5Qr.clear();
-      }
-    } catch (e) {
-      if (!silent) console.log(e);
-    } finally {
-      html5Qr = null;
-      qrReader.innerHTML = "";
-    }
-  }
-
-  async function openScan(title, targetEl, afterFillCb) {
+  async function openScan(title, afterCb) {
     scanTitle.textContent = title;
-    scanTarget = targetEl || null;
-    scanAfterFill = afterFillCb || null;
+    scanAfter = afterCb || null;
     resetScanCollect();
-
     scanModal.classList.remove("hidden");
     try {
       await startScanner();
-    } catch (e) {
+    } catch {
       scanHint.textContent = "カメラを開始できません（許可/HTTPS/他アプリ使用中を確認）";
     }
   }
 
   async function closeScan() {
-    scanAfterFill = null;
-    await stopScanner(true);
+    scanAfter = null;
+    await stopScanner();
     scanModal.classList.add("hidden");
-    scanTarget = null;
     resetScanCollect();
   }
 
   btnCloseScan.addEventListener("click", closeScan);
-  btnPasteToTarget.addEventListener("click", closeScan);
+  btnCloseScan2.addEventListener("click", closeScan);
+  scanModal.addEventListener("click", (e) => { if (e.target === scanModal) closeScan(); });
 
   btnSwitchCam.addEventListener("click", async () => {
     scanFacing = (scanFacing === "environment") ? "user" : "environment";
     scanHint.textContent = "カメラ切替中…";
-    await stopScanner(true);
+    await stopScanner();
     resetScanCollect();
     try { await startScanner(); }
-    catch { scanHint.textContent = "切替に失敗（閉じる→手動へ）"; }
+    catch { scanHint.textContent = "切替に失敗（閉じる→再試行）"; }
   });
-
-  scanModal.addEventListener("click", (e) => { if (e.target === scanModal) closeScan(); });
 
   // ===== Mode =====
   function setMode(mode) {
@@ -767,11 +580,49 @@
   btnModeRecv.addEventListener("click", () => setMode("recv"));
   setMode("send");
 
-  btnTogglePw.addEventListener("click", () => {
-    const isPw = pwEl.type === "password";
-    pwEl.type = isPw ? "text" : "password";
-    btnTogglePw.textContent = isPw ? "非表示" : "表示";
-  });
+  // ====== ICE gather (短時間だけ待つ：固まらない) ======
+  async function gatherIceQuick(pc, maxMs=2200) {
+    const t0 = performance.now();
+    let lastCand = performance.now();
+    let hasAny = false;
+
+    const onCand = () => {
+      hasAny = true;
+      lastCand = performance.now();
+    };
+
+    pc.addEventListener("icecandidate", onCand);
+
+    return new Promise((resolve) => {
+      const tick = () => {
+        const now = performance.now();
+        const doneByState = (pc.iceGatheringState === "complete");
+        const doneByIdle = hasAny && (now - lastCand > 220);
+        const doneByMax = (now - t0 > maxMs);
+        if (doneByState || doneByIdle || doneByMax) {
+          pc.removeEventListener("icecandidate", onCand);
+          resolve();
+          return;
+        }
+        setTimeout(tick, 120);
+      };
+      tick();
+    });
+  }
+
+  // ====== Signal format（最小） ======
+  // Offer: "O1\n<SDP>"
+  // Answer:"A1\n<SDP>"
+  function makeOfferSignal(sdp) { return "O1\n" + (sdp || ""); }
+  function makeAnswerSignal(sdp){ return "A1\n" + (sdp || ""); }
+
+  function parseSignal(text) {
+    const t = (text || "").replace(/\r\n/g, "\n");
+    if (t.startsWith("O1\n")) return { kind: "offer", sdp: t.slice(3) };
+    if (t.startsWith("A1\n")) return { kind: "answer", sdp: t.slice(3) };
+    // 旧/混在に備え：offer/answerを推測できない場合はnull
+    return null;
+  }
 
   // ====== Sender logic ======
   let sendPc = null;
@@ -800,7 +651,7 @@
     btnMicMute.disabled = false;
     btnNightLocal.disabled = false;
     btnTorch.disabled = false;
-    btnMakeOffer.disabled = false;
+    btnShowOfferQRNow.disabled = false;
     btnFullLocal.disabled = false;
 
     const vtrack = sendStream.getVideoTracks()[0];
@@ -813,7 +664,7 @@
       `音声：${atrack ? "有効" : "なし"}`
     ].join(" / ");
 
-    sendConn.textContent = "配信中（Offer作成へ）";
+    sendConn.textContent = "配信中（Offer QRへ）";
   }
 
   function stopSenderAll() {
@@ -823,18 +674,13 @@
     if (sendStream) sendStream.getTracks().forEach(t => t.stop());
     sendStream = null;
 
-    offerOut.value = "";
-    answerIn.value = "";
-    btnCopyOffer.disabled = true;
-    btnConnectSend.disabled = false; // 手動予備としては残す
-    btnScanAnswerQR.disabled = true;
-
     btnStopAllSend.disabled = true;
     btnFlipCam.disabled = true;
     btnMicMute.disabled = true;
     btnNightLocal.disabled = true;
     btnTorch.disabled = true;
-    btnMakeOffer.disabled = true;
+    btnShowOfferQRNow.disabled = true;
+    btnScanAnswerQR.disabled = true;
     btnFullLocal.disabled = true;
 
     micOn = true;
@@ -888,93 +734,38 @@
     }
   }
 
-  // “固まらない”ためのICE収集（一定時間だけ待つ）
-  async function gatherIceQuick(pc, candidates, maxMs=2400) {
-    const t0 = performance.now();
-    let last = performance.now();
-    let hasAny = false;
-
-    const onCand = (e) => {
-      if (!e.candidate) return;
-      const s = e.candidate.candidate || "";
-      if (isHostCandidate(s)) {
-        candidates.push(e.candidate);
-        last = performance.now();
-        hasAny = true;
-      }
-    };
-
-    pc.addEventListener("icecandidate", onCand);
-
-    return new Promise((resolve) => {
-      const tick = () => {
-        const now = performance.now();
-        const doneByState = (pc.iceGatheringState === "complete");
-        const doneByIdle = hasAny && (now - last > 250);
-        const doneByMax = (now - t0 > maxMs);
-
-        if (doneByState || doneByIdle || doneByMax) {
-          pc.removeEventListener("icecandidate", onCand);
-          resolve();
-          return;
-        }
-        setTimeout(tick, 120);
-      };
-      tick();
-    });
-  }
-
-  async function makeOfferEncrypted() {
-    const pass = mustPw();
+  async function makeOfferSignalString() {
     if (!sendStream) throw new Error("先に「カメラ開始」をしてください。");
 
-    // 既存があれば閉じる
+    // 既存PCがあれば閉じる
     try { if (sendPc) sendPc.close(); } catch {}
     sendPc = null;
 
     sendPc = new RTCPeerConnection(pcConfig);
-    sendStream.getTracks().forEach(tr => sendPc.addTrack(tr, sendStream));
-
-    const candidates = [];
     sendPc.onconnectionstatechange = () => { sendConn.textContent = sendPc.connectionState; };
 
-    // createOffer / setLocalDescription が端末で詰まらないようタイムアウトを付ける
-    const offer = await withTimeout(sendPc.createOffer(), 6000, "Offer生成がタイムアウトしました");
-    await withTimeout(sendPc.setLocalDescription(offer), 6000, "ローカル設定がタイムアウトしました");
+    // track追加
+    sendStream.getTracks().forEach(tr => sendPc.addTrack(tr, sendStream));
 
-    // LAN用途なので“短時間だけ”候補収集（固まらない）
-    await gatherIceQuick(sendPc, candidates, 2400);
+    // Offer作成
+    const offer = await sendPc.createOffer();
+    await sendPc.setLocalDescription(offer);
 
-    const payload = { sdp: sendPc.localDescription, candidates };
-    const blob = await withTimeout(encryptJSON(pass, payload), 7000, "暗号化処理がタイムアウトしました");
+    // “短時間だけ”ICEを集めてSDPにcandidateを載せる
+    await gatherIceQuick(sendPc, 2200);
 
-    // 予備欄に保持（通常は見せない）
-    offerOut.value = blob;
-    btnCopyOffer.disabled = false;
-
-    // Answer読取を有効化
-    btnScanAnswerQR.disabled = false;
-
-    sendConn.textContent = "Offer作成済（QR表示中）";
-    return blob;
+    const sdp = filterHostCandidatesInSdp(sendPc.localDescription?.sdp || "");
+    return makeOfferSignal(sdp);
   }
 
-  async function connectWithEncryptedAnswer(blob) {
-    const pass = mustPw();
-    if (!sendPc) throw new Error("先に「Offer作成」をしてください。");
-    if (!blob) throw new Error("Answerがありません（QR読取してください）。");
+  async function applyAnswerFromSignalString(signalText) {
+    if (!sendPc) throw new Error("先にOfferのQRを表示してください。");
 
-    let payload;
-    try { payload = await withTimeout(decryptJSON(pass, blob), 7000, "復号がタイムアウトしました"); }
-    catch { throw new Error("復号に失敗：パスワード違い／コード破損の可能性。"); }
+    const parsed = parseSignal(signalText);
+    if (!parsed || parsed.kind !== "answer") throw new Error("AnswerのQRではありません。");
 
-    await withTimeout(sendPc.setRemoteDescription(payload.sdp), 6000, "リモート設定がタイムアウトしました");
-    if (Array.isArray(payload.candidates)) {
-      for (const c of payload.candidates) {
-        const s = c.candidate || "";
-        if (isHostCandidate(s)) { try { await sendPc.addIceCandidate(c); } catch {} }
-      }
-    }
+    const sdp = filterHostCandidatesInSdp(parsed.sdp || "");
+    await sendPc.setRemoteDescription({ type: "answer", sdp });
     sendConn.textContent = "接続中…";
   }
 
@@ -995,59 +786,50 @@
   btnMicMute.addEventListener("click", toggleMic);
   btnNightLocal.addEventListener("click", toggleNightLocal);
   btnTorch.addEventListener("click", toggleTorch);
+  btnFullLocal.addEventListener("click", () => requestVideoFullscreen(localVideo));
+  localVideo.addEventListener("dblclick", () => requestVideoFullscreen(localVideo));
 
-  // ★ここが要望ポイント：Offer作成ボタン → “一瞬で”QRを出す（テキストは出さない）
-  btnMakeOffer.addEventListener("click", async () => {
+  // ★押したら即QR画面 → 裏でOffer作ってQRを差し替え
+  btnShowOfferQRNow.addEventListener("click", async () => {
     try {
-      btnMakeOffer.disabled = true;
+      btnShowOfferQRNow.disabled = true;
       globalState.textContent = "送信：Offer作成中…";
-      const blob = await makeOfferEncrypted();
+
+      // 先にモーダルを出す（体感“即”）
+      showQrModal("Offer（受信側でQR読取）", "準備中…");
+
+      const offerSignal = await makeOfferSignalString();
+      setQrContent(offerSignal);
 
       globalState.textContent = "送信：Offer QR表示中";
-      openQR("Offer（受信側でQR読取）", blob);
+      btnScanAnswerQR.disabled = false;
+      sendConn.textContent = "Offer作成済（Answer待ち）";
     } catch (e) {
+      closeQR();
       globalState.textContent = "エラー";
       alert(e.message || "Offer作成に失敗しました");
     } finally {
-      btnMakeOffer.disabled = false;
+      btnShowOfferQRNow.disabled = false;
     }
   });
 
-  btnCopyOffer.addEventListener("click", () => safeCopy(offerOut.value));
-
-  // Answer QR読取 → 読み取り完了後に“自動接続”
+  // Answer QRを読取 → 自動接続
   btnScanAnswerQR.addEventListener("click", async () => {
     try {
-      mustPw();
-      await openScan("Answer QR読取（送信側）", answerIn, async (val) => {
+      await openScan("Answer QR読取（送信側）", async (val) => {
         try {
           globalState.textContent = "送信：接続中…";
-          await connectWithEncryptedAnswer(val);
+          await applyAnswerFromSignalString(val);
           globalState.textContent = "送信：接続処理OK（状態を確認）";
         } catch (e) {
           globalState.textContent = "エラー";
           alert(e.message || "接続に失敗しました");
         }
       });
-    } catch (e) {
-      alert(e.message || "パスワードを先に入力してください");
+    } catch {
+      alert("QR読取を開始できませんでした。");
     }
   });
-
-  // 予備：手動貼付→接続
-  btnConnectSend.addEventListener("click", async () => {
-    try {
-      globalState.textContent = "送信：接続中…";
-      await connectWithEncryptedAnswer((answerIn.value || "").trim());
-      globalState.textContent = "送信：接続処理OK（状態を確認）";
-    } catch (e) {
-      globalState.textContent = "エラー";
-      alert(e.message || "接続に失敗しました");
-    }
-  });
-
-  btnFullLocal.addEventListener("click", () => requestVideoFullscreen(localVideo));
-  localVideo.addEventListener("dblclick", () => requestVideoFullscreen(localVideo));
 
   // ====== Receiver logic ======
   let recvPc = null;
@@ -1061,14 +843,10 @@
     recvStream = null;
     remoteVideo.srcObject = null;
 
-    offerIn.value = "";
-    answerOut.value = "";
-    btnCopyAnswer.disabled = true;
-
     btnPlayRemote.disabled = true;
     btnSpkMute.disabled = true;
     btnNightRemote.disabled = true;
-    btnFull.disabled = true;
+    btnFullAlt.disabled = true;
     btnFullRemote.disabled = true;
     btnResetRecv.disabled = true;
 
@@ -1083,19 +861,15 @@
     globalState.textContent = "受信：待機中";
   }
 
-  async function makeAnswerEncrypted(offerBlob) {
-    const pass = mustPw();
-    const blob = (offerBlob || offerIn.value || "").trim();
-    if (!blob) throw new Error("Offerがありません（QR読取してください）。");
+  async function makeAnswerFromOfferSignalString(signalText) {
+    const parsed = parseSignal(signalText);
+    if (!parsed || parsed.kind !== "offer") throw new Error("OfferのQRではありません。");
 
-    let offerPayload;
-    try { offerPayload = await withTimeout(decryptJSON(pass, blob), 7000, "復号がタイムアウトしました"); }
-    catch { throw new Error("復号に失敗：パスワード違い／コード破損の可能性。"); }
-
+    // 既存PCがあれば閉じる
     try { if (recvPc) recvPc.close(); } catch {}
-    recvPc = new RTCPeerConnection(pcConfig);
+    recvPc = null;
 
-    const candidates = [];
+    recvPc = new RTCPeerConnection(pcConfig);
     recvPc.onconnectionstatechange = () => { recvConn.textContent = recvPc.connectionState; };
 
     recvPc.ontrack = (e) => {
@@ -1106,71 +880,51 @@
       btnPlayRemote.disabled = false;
       btnSpkMute.disabled = false;
       btnNightRemote.disabled = false;
-      btnFull.disabled = false;
+      btnFullAlt.disabled = false;
       btnFullRemote.disabled = false;
       btnResetRecv.disabled = false;
 
-      // iOSは自動再生が止まることがあるので、失敗してもOK
+      // iOSは失敗してもOK（再生ボタンで）
       remoteVideo.play().catch(() => {});
     };
 
-    await withTimeout(recvPc.setRemoteDescription(offerPayload.sdp), 6000, "リモート設定がタイムアウトしました");
-    if (Array.isArray(offerPayload.candidates)) {
-      for (const c of offerPayload.candidates) {
-        const s = c.candidate || "";
-        if (isHostCandidate(s)) { try { await recvPc.addIceCandidate(c); } catch {} }
-      }
-    }
+    const offerSdp = filterHostCandidatesInSdp(parsed.sdp || "");
+    await recvPc.setRemoteDescription({ type: "offer", sdp: offerSdp });
 
-    const answer = await withTimeout(recvPc.createAnswer(), 6000, "Answer生成がタイムアウトしました");
-    await withTimeout(recvPc.setLocalDescription(answer), 6000, "ローカル設定がタイムアウトしました");
+    const answer = await recvPc.createAnswer();
+    await recvPc.setLocalDescription(answer);
 
-    await gatherIceQuick(recvPc, candidates, 2400);
+    await gatherIceQuick(recvPc, 2200);
 
-    const payload = { sdp: recvPc.localDescription, candidates };
-    const outBlob = await withTimeout(encryptJSON(pass, payload), 7000, "暗号化処理がタイムアウトしました");
-
-    answerOut.value = outBlob;
-    btnCopyAnswer.disabled = false;
-    btnResetRecv.disabled = false;
-
-    globalState.textContent = "受信：Answer QR表示中";
-    recvConn.textContent = "Answer作成済";
-    return outBlob;
+    const sdp = filterHostCandidatesInSdp(recvPc.localDescription?.sdp || "");
+    return makeAnswerSignal(sdp);
   }
 
-  // Offer QR読取 → 読取完了後に“自動でAnswer作成してQR表示”
+  // Offer QR読取 → 読み取り完了後に “自動でAnswer作成してQR表示”
   btnScanOfferQR.addEventListener("click", async () => {
     try {
-      mustPw();
-      await openScan("Offer QR読取（受信側）", offerIn, async (val) => {
+      await openScan("Offer QR読取（受信側）", async (val) => {
         try {
           globalState.textContent = "受信：Answer作成中…";
-          const outBlob = await makeAnswerEncrypted(val);
-          openQR("Answer（送信側でQR読取）", outBlob);
+
+          // 先にAnswerモーダルを出す（体感“即”）
+          showQrModal("Answer（送信側でQR読取）", "準備中…");
+
+          const answerSignal = await makeAnswerFromOfferSignalString(val);
+          setQrContent(answerSignal);
+
+          globalState.textContent = "受信：Answer QR表示中";
+          recvConn.textContent = "Answer作成済";
         } catch (e) {
+          closeQR();
           globalState.textContent = "エラー";
           alert(e.message || "Answer作成に失敗しました");
         }
       });
-    } catch (e) {
-      alert(e.message || "パスワードを先に入力してください");
+    } catch {
+      alert("QR読取を開始できませんでした。");
     }
   });
-
-  // 予備：手動でAnswer作成
-  btnMakeAnswer.addEventListener("click", async () => {
-    try {
-      globalState.textContent = "受信：Answer作成中…";
-      const outBlob = await makeAnswerEncrypted();
-      openQR("Answer（送信側でQR読取）", outBlob);
-    } catch (e) {
-      globalState.textContent = "エラー";
-      alert(e.message || "Answer作成に失敗しました");
-    }
-  });
-
-  btnCopyAnswer.addEventListener("click", () => safeCopy(answerOut.value));
 
   btnPlayRemote.addEventListener("click", async () => { try { await remoteVideo.play(); } catch {} });
 
@@ -1186,13 +940,13 @@
     btnNightRemote.textContent = nightRemoteOn ? "🌙 暗視：ON" : "🌙 暗視：OFF";
   });
 
-  btnFull.addEventListener("click", () => requestVideoFullscreen(remoteVideo));
+  btnFullAlt.addEventListener("click", () => requestVideoFullscreen(remoteVideo));
   btnFullRemote.addEventListener("click", () => requestVideoFullscreen(remoteVideo));
   remoteVideo.addEventListener("dblclick", () => requestVideoFullscreen(remoteVideo));
 
   btnResetRecv.addEventListener("click", resetReceiverAll);
 
-  // ====== Basic Cleanup ======
+  // Cleanup
   window.addEventListener("beforeunload", async () => {
     stopSenderAll();
     resetReceiverAll();
