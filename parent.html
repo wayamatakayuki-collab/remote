@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>Baby Monitor - Receiver</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { -webkit-tap-highlight-color: transparent; }
+    video { background:#000; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+  <div class="max-w-3xl mx-auto p-4 space-y-4">
+    <header class="space-y-1">
+      <div class="text-xl font-black">ベビーモニター（受信）</div>
+      <div class="text-xs text-slate-500">同じWi-Fi内／Offerを貼る→Answerを返す</div>
+    </header>
+
+    <section class="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <div class="font-bold">Offerを貼り付け</div>
+        <div class="flex items-center gap-2">
+          <button id="btnMakeAnswer" class="px-3 py-2 rounded-xl bg-indigo-600 text-white font-bold">③ Answerを作成</button>
+          <button id="btnCopyAnswer" class="px-3 py-2 rounded-xl bg-slate-200 font-bold" disabled>コピー</button>
+        </div>
+      </div>
+
+      <textarea id="txtOfferIn" class="w-full h-40 rounded-xl border border-slate-200 p-3 text-xs font-mono" placeholder="送信側のOffer(JSON)をここに貼り付け"></textarea>
+
+      <div class="text-sm font-bold">Answer（コピーして送信側へ）</div>
+      <textarea id="txtAnswerOut" class="w-full h-40 rounded-xl border border-slate-200 p-3 text-xs font-mono" readonly></textarea>
+
+      <div class="flex items-center justify-between">
+        <div class="text-sm">
+          状態：<span id="connState" class="font-bold">未接続</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <label class="flex items-center gap-2 text-sm font-bold">
+            <input id="chkBeep" type="checkbox" class="w-4 h-4" />
+            アラート音（操作後に有効）
+          </label>
+        </div>
+      </div>
+
+      <div id="alertBanner" class="hidden rounded-xl border border-rose-200 bg-rose-50 p-3 text-rose-700 font-bold">
+        大きな音を検知しました
+      </div>
+    </section>
+
+    <section class="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <div class="font-bold">映像・音声</div>
+        <div class="flex items-center gap-2">
+          <button id="btnPlay" class="px-3 py-2 rounded-xl bg-emerald-600 text-white font-bold" disabled>再生する</button>
+          <button id="btnHangup" class="px-3 py-2 rounded-xl bg-slate-200 font-bold" disabled>切断</button>
+        </div>
+      </div>
+
+      <video id="remoteVideo" class="w-full rounded-2xl aspect-video" playsinline autoplay></video>
+
+      <div class="flex items-center justify-between">
+        <label class="flex items-center gap-2 text-sm font-bold">
+          <input id="chkWake" type="checkbox" class="w-4 h-4" />
+          画面スリープ防止（対応端末のみ）
+        </label>
+        <div id="wakeState" class="text-xs text-slate-500"></div>
+      </div>
+    </section>
+
+    <footer class="text-xs text-slate-500">
+      ヒント：iPhone/iPadは自動再生制限があるため「再生する」を一度押すと安定します。
+    </footer>
+  </div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+
+  const txtOfferIn = $("txtOfferIn");
+  const btnMakeAnswer = $("btnMakeAnswer");
+  const txtAnswerOut = $("txtAnswerOut");
+  const btnCopyAnswer = $("btnCopyAnswer");
+
+  const remoteVideo = $("remoteVideo");
+  const btnPlay = $("btnPlay");
+  const btnHangup = $("btnHangup");
+  const connState = $("connState");
+
+  const alertBanner = $("alertBanner");
+  const chkBeep = $("chkBeep");
+
+  const chkWake = $("chkWake");
+  const wakeState = $("wakeState");
+  let wakeLock = null;
+
+  let pc = null;
+  let mediaStream = null;
+  let audioCtx = null;
+
+  const iceServers = [
+    { urls: "stun:stun.l.google.com:19302" }
+  ];
+
+  async function copyText(el) {
+    const text = el.value;
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      el.focus();
+      el.select();
+      document.execCommand("copy");
+    }
+  }
+
+  function waitIceComplete(pc) {
+    return new Promise(resolve => {
+      if (pc.iceGatheringState === "complete") return resolve();
+      const check = () => {
+        if (pc.iceGatheringState === "complete") {
+          pc.removeEventListener("icegatheringstatechange", check);
+          resolve();
+        }
+      };
+      pc.addEventListener("icegatheringstatechange", check);
+    });
+  }
+
+  function showAlert() {
+    alertBanner.classList.remove("hidden");
+    setTimeout(() => alertBanner.classList.add("hidden"), 2500);
+    if (chkBeep.checked) beep();
+  }
+
+  function beep() {
+    // ユーザー操作後にしか鳴らない端末があるため、チェックONは「準備」扱い
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.connect(g);
+      g.connect(audioCtx.destination);
+      g.gain.value = 0.05;
+      o.frequency.value = 880;
+      o.start();
+      setTimeout(() => { o.stop(); }, 160);
+    } catch {}
+  }
+
+  async function makeAnswer() {
+    let offerObj = null;
+    try {
+      offerObj = JSON.parse(txtOfferIn.value.trim());
+    } catch {
+      alert("Offer(JSON)の形式が不正です。送信側の出力をそのまま貼り付けてください。");
+      return;
+    }
+
+    pc = new RTCPeerConnection({ iceServers });
+    const candidates = [];
+    pc.onicecandidate = (e) => { if (e.candidate) candidates.push(e.candidate); };
+
+    pc.ontrack = (e) => {
+      if (!mediaStream) mediaStream = new MediaStream();
+      mediaStream.addTrack(e.track);
+      remoteVideo.srcObject = mediaStream;
+      btnPlay.disabled = false;
+    };
+
+    pc.onconnectionstatechange = () => {
+      connState.textContent = pc.connectionState;
+    };
+
+    // DataChannel（送信側からのアラート）
+    pc.ondatachannel = (ev) => {
+      const ch = ev.channel;
+      ch.onmessage = (m) => {
+        try {
+          const obj = JSON.parse(m.data);
+          if (obj.type === "LOUD") showAlert();
+        } catch {}
+      };
+    };
+
+    await pc.setRemoteDescription(offerObj.sdp);
+
+    // Offer側の候補を追加
+    if (Array.isArray(offerObj.candidates)) {
+      for (const c of offerObj.candidates) {
+        try { await pc.addIceCandidate(c); } catch {}
+      }
+    }
+
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    await waitIceComplete(pc);
+
+    const payload = { sdp: pc.localDescription, candidates };
+    txtAnswerOut.value = JSON.stringify(payload);
+
+    btnCopyAnswer.disabled = false;
+    btnHangup.disabled = false;
+    connState.textContent = "Answer作成済（送信側へ貼り付け）";
+  }
+
+  async function playVideo() {
+    try { await remoteVideo.play(); } catch {}
+    // アラート音も“ユーザー操作”で初期化しておくと鳴りやすい
+    if (chkBeep.checked) beep();
+  }
+
+  function hangup() {
+    if (pc) { try { pc.close(); } catch {} }
+    pc = null;
+    mediaStream = null;
+    remoteVideo.srcObject = null;
+
+    connState.textContent = "切断";
+    btnPlay.disabled = true;
+    btnHangup.disabled = true;
+    txtAnswerOut.value = "";
+  }
+
+  async function setWakeLock(on) {
+    if (!("wakeLock" in navigator)) {
+      wakeState.textContent = "この端末は非対応";
+      return;
+    }
+    try {
+      if (on) {
+        wakeLock = await navigator.wakeLock.request("screen");
+        wakeState.textContent = "ON";
+        wakeLock.addEventListener("release", () => wakeState.textContent = "OFF");
+      } else {
+        if (wakeLock) await wakeLock.release();
+        wakeLock = null;
+        wakeState.textContent = "OFF";
+      }
+    } catch {
+      wakeState.textContent = "失敗";
+    }
+  }
+
+  btnMakeAnswer.addEventListener("click", async () => {
+    try { await makeAnswer(); } catch { alert("Answer作成に失敗しました。"); }
+  });
+
+  btnCopyAnswer.addEventListener("click", async () => {
+    await copyText(txtAnswerOut);
+  });
+
+  btnPlay.addEventListener("click", async () => {
+    await playVideo();
+  });
+
+  btnHangup.addEventListener("click", () => hangup());
+
+  chkWake.addEventListener("change", async (e) => {
+    await setWakeLock(e.target.checked);
+  });
+
+  window.addEventListener("beforeunload", () => hangup());
+})();
+</script>
+</body>
+</html>
