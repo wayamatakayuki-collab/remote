@@ -41,7 +41,7 @@
     <section class="bg-white rounded-3xl border border-slate-200 p-4 space-y-4 shadow-sm">
       <div class="flex items-center justify-between gap-3 flex-wrap">
         <div class="font-black text-slate-700">0）モード選択</div>
-        <div class="text-xs text-slate-500">パスワード不要／QRだけで接続</div>
+        <div class="text-xs text-slate-500">パスワード不要／テキスト欄なし／QRだけで接続</div>
       </div>
 
       <div class="grid md:grid-cols-2 gap-3">
@@ -115,7 +115,7 @@
           <div class="space-y-3">
             <div class="bg-indigo-50 border border-indigo-200 rounded-2xl p-3 text-sm">
               <div class="font-black text-indigo-900">1）OfferのQRを表示</div>
-              <div class="text-indigo-700 text-xs mt-1">押すとすぐQR画面が出ます（裏でOffer生成）</div>
+              <div class="text-indigo-700 text-xs mt-1">押すとすぐQR画面→裏で生成→QRが確定します</div>
               <div class="mt-2">
                 <button id="btnShowOfferQRNow" class="w-full px-4 py-4 rounded-3xl bg-indigo-600 text-white font-black text-base active:scale-[0.99]" disabled>
                   📷 Offer QR を表示する
@@ -201,7 +201,7 @@
     </section>
 
     <div class="text-[11px] text-slate-500 px-1">
-      ✅ 仕様：パスワードなし／テキスト入力なし。QRの読み取りだけで接続します。
+      ✅ 改善：SDPをgzip圧縮してQR枚数を減らし、分割時も「手動送り」で確実に読み取れるようにしています。
     </div>
   </div>
 
@@ -214,16 +214,25 @@
           <div>
             <div id="qrTitle" class="font-black text-slate-800">QR</div>
             <div id="qrMeta" class="text-[11px] text-slate-500 mt-0.5"></div>
-            <div class="text-xs text-slate-500">相手の端末で「QR読取」してください</div>
+            <div id="qrHint" class="text-xs text-slate-500">相手の端末で「QR読取」してください</div>
           </div>
           <button id="btnCloseQR" class="px-3 py-2 rounded-2xl bg-slate-200 font-black active:scale-[0.99]">閉じる</button>
         </div>
+
         <div class="p-4 space-y-3">
           <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3 flex items-center justify-center">
             <div id="qrBox"></div>
           </div>
-          <div id="qrFoot" class="text-[11px] text-slate-500">
-            ※長い場合は「分割QR」を自動で切り替えて表示します。
+
+          <div id="qrPager" class="hidden">
+            <div class="flex items-center justify-between gap-2">
+              <button id="btnQrPrev" class="px-4 py-3 rounded-2xl bg-slate-200 font-black active:scale-[0.99]">◀ 前</button>
+              <div class="text-sm font-black text-slate-700" id="qrPageText">1 / 1</div>
+              <button id="btnQrNext" class="px-4 py-3 rounded-2xl bg-slate-200 font-black active:scale-[0.99]">次 ▶</button>
+            </div>
+            <div class="text-[11px] text-slate-500 mt-2">
+              ※分割QRのときは「読み取り完了」表示を確認してから次へ進むと確実です。
+            </div>
           </div>
         </div>
       </div>
@@ -243,10 +252,12 @@
           </div>
           <button id="btnCloseScan" class="px-3 py-2 rounded-2xl bg-slate-200 font-black active:scale-[0.99]">閉じる</button>
         </div>
+
         <div class="p-4 space-y-3">
           <div class="bg-slate-50 border border-slate-200 rounded-2xl p-2">
             <div id="qrReader" class="w-full"></div>
           </div>
+
           <div class="flex gap-2">
             <button id="btnSwitchCam" class="flex-1 px-3 py-2 rounded-2xl border border-slate-200 bg-white font-black active:scale-[0.99]">
               🔁 カメラ切替
@@ -255,6 +266,7 @@
               閉じる
             </button>
           </div>
+
           <div class="text-xs text-slate-500">
             ※iOSは許可ダイアログが出ます。拒否すると読取できません。
           </div>
@@ -304,8 +316,13 @@
   const qrModal = $("qrModal");
   const qrTitle = $("qrTitle");
   const qrMeta = $("qrMeta");
+  const qrHint = $("qrHint");
   const qrBox = $("qrBox");
   const btnCloseQR = $("btnCloseQR");
+  const qrPager = $("qrPager");
+  const btnQrPrev = $("btnQrPrev");
+  const btnQrNext = $("btnQrNext");
+  const qrPageText = $("qrPageText");
 
   const scanModal = $("scanModal");
   const scanTitle = $("scanTitle");
@@ -321,13 +338,9 @@
     : "OK";
 
   // ====== LAN-only WebRTC policy ======
-  // STUN/TURNなし（外部接続を避ける意図）
   const pcConfig = { iceServers: [] };
 
-  function isHostCandidateLine(line) {
-    // a=candidate:... typ host ...
-    return / typ host /i.test(line);
-  }
+  function isHostCandidateLine(line) { return / typ host /i.test(line); }
 
   function filterHostCandidatesInSdp(sdp) {
     const lines = (sdp || "").split(/\r\n|\n/);
@@ -339,7 +352,6 @@
         kept.push(line);
       }
     }
-    // SDPはCRLF推奨
     return kept.join("\r\n").trim() + "\r\n";
   }
 
@@ -352,7 +364,74 @@
     } catch {}
   }
 
-  // ===== QR split protocol =====
+  // ===== gzip pack/unpack (Passwordなし / 高速) =====
+  const te = new TextEncoder();
+  const td = new TextDecoder();
+
+  function b64uEncode(u8) {
+    let s = btoa(String.fromCharCode(...u8));
+    return s.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  }
+  function b64uDecode(s) {
+    s = s.replace(/-/g, "+").replace(/_/g, "/");
+    while (s.length % 4) s += "=";
+    const bin = atob(s);
+    const u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    return u8;
+  }
+
+  async function gzipBytes(u8) {
+    if (!("CompressionStream" in window)) return { u8, gz: false };
+    const cs = new CompressionStream("gzip");
+    const w = cs.writable.getWriter();
+    await w.write(u8);
+    await w.close();
+    const ab = await new Response(cs.readable).arrayBuffer();
+    return { u8: new Uint8Array(ab), gz: true };
+  }
+
+  async function gunzipBytes(u8) {
+    if (!("DecompressionStream" in window)) return u8;
+    const ds = new DecompressionStream("gzip");
+    const w = ds.writable.getWriter();
+    await w.write(u8);
+    await w.close();
+    const ab = await new Response(ds.readable).arrayBuffer();
+    return new Uint8Array(ab);
+  }
+
+  // できれば圧縮して短くする： Z1g|<b64u(gzip(text))>
+  async function packTextForQr(text) {
+    const raw = te.encode(text || "");
+    const { u8, gz } = await gzipBytes(raw);
+    if (!gz) return text; // 圧縮不可環境はそのまま（ただし分割は増える）
+    return "Z1g|" + b64uEncode(u8);
+  }
+
+  async function unpackTextFromQr(text) {
+    const t = (text || "").trim();
+    if (!t.startsWith("Z1g|")) return t;
+    const b64 = t.slice(4);
+    const u8 = b64uDecode(b64);
+    const raw = await gunzipBytes(u8);
+    return td.decode(raw);
+  }
+
+  // ===== Signal format（最小） =====
+  // Offer: "O1\n<SDP>"
+  // Answer:"A1\n<SDP>"
+  function makeOfferSignal(sdp) { return "O1\n" + (sdp || ""); }
+  function makeAnswerSignal(sdp){ return "A1\n" + (sdp || ""); }
+
+  function parseSignal(text) {
+    const t = (text || "").replace(/\r\n/g, "\n");
+    if (t.startsWith("O1\n")) return { kind: "offer", sdp: t.slice(3) };
+    if (t.startsWith("A1\n")) return { kind: "answer", sdp: t.slice(3) };
+    return null;
+  }
+
+  // ===== QR split protocol (手動送り) =====
   // 1枚に収まらない場合、BM1|<id>|<i>/<n>|<chunk> で分割
   function randId(len = 6) {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -362,7 +441,8 @@
   }
 
   function makeQrSegments(text) {
-    const CHUNK = 850; // 安全側
+    // 圧縮後は短いので chunk を少し大きめ
+    const CHUNK = 1300;
     if ((text || "").length <= CHUNK) {
       return { raw: text, parts: [text] };
     }
@@ -377,7 +457,6 @@
   }
 
   function parseBm1(text) {
-    // BM1|id|i/n|chunk
     if (!text.startsWith("BM1|")) return null;
     const a = text.split("|");
     if (a.length < 4) return null;
@@ -389,67 +468,89 @@
     return { id, i: Number(m[1]), n: Number(m[2]), chunk };
   }
 
-  // ===== QR modal: “即表示→後からQR描画” にする =====
+  // ===== QR modal: 手動でページ送り =====
   let qrParts = [];
   let qrIdx = 0;
-  let qrTimer = null;
 
-  function showQrModal(title, meta="") {
+  function qrSize() {
+    const w = Math.min(360, Math.max(260, window.innerWidth - 120));
+    return Math.floor(w);
+  }
+
+  function renderQrAt(idx) {
+    qrBox.innerHTML = "";
+    const size = qrSize();
+
+    // “白フチ”を強制（読み取り安定）
+    const wrap = document.createElement("div");
+    wrap.className = "bg-white p-3 rounded-2xl";
+    const inner = document.createElement("div");
+    wrap.appendChild(inner);
+    qrBox.appendChild(wrap);
+
+    new QRCode(inner, {
+      text: qrParts[idx],
+      width: size,
+      height: size,
+      correctLevel: QRCode.CorrectLevel.L
+    });
+
+    if (qrParts.length <= 1) {
+      qrPager.classList.add("hidden");
+      qrMeta.textContent = "";
+    } else {
+      qrPager.classList.remove("hidden");
+      qrPageText.textContent = `${idx + 1} / ${qrParts.length}`;
+      qrMeta.textContent = `分割QR：${idx + 1} / ${qrParts.length}`;
+    }
+  }
+
+  function showQrModal(title) {
     qrTitle.textContent = title;
-    qrMeta.textContent = meta;
+    qrHint.textContent = "相手の端末で「QR読取」してください";
+    qrMeta.textContent = "";
     qrBox.innerHTML = `
-      <div class="w-[280px] h-[280px] grid place-items-center">
+      <div class="grid place-items-center">
         <div class="text-sm font-black text-slate-600">生成中…</div>
       </div>
     `;
+    qrPager.classList.add("hidden");
     qrModal.classList.remove("hidden");
   }
 
-  function setQrContent(text) {
-    const pack = makeQrSegments(text || "");
+  function setQrContentPacked(packedText) {
+    const pack = makeQrSegments(packedText || "");
     qrParts = pack.parts;
     qrIdx = 0;
-
-    const render = (idx) => {
-      qrBox.innerHTML = "";
-      try {
-        new QRCode(qrBox, {
-          text: qrParts[idx],
-          width: 280,
-          height: 280,
-          correctLevel: QRCode.CorrectLevel.L
-        });
-      } catch {
-        qrBox.innerHTML = `<div class="text-sm font-bold text-rose-600">
-          QR生成に失敗しました。端末負荷が高い可能性があります（再読み込み→再試行）。
-        </div>`;
-      }
-      qrMeta.textContent = (qrParts.length <= 1) ? "" : `分割QR：${idx + 1} / ${qrParts.length}（自動切替）`;
-    };
-
-    render(0);
-
-    if (qrTimer) clearInterval(qrTimer);
-    if (qrParts.length > 1) {
-      qrTimer = setInterval(() => {
-        qrIdx = (qrIdx + 1) % qrParts.length;
-        render(qrIdx);
-      }, 800);
-    }
+    renderQrAt(0);
   }
 
   function closeQR() {
     qrModal.classList.add("hidden");
     qrBox.innerHTML = "";
     qrMeta.textContent = "";
-    if (qrTimer) clearInterval(qrTimer);
-    qrTimer = null;
     qrParts = [];
     qrIdx = 0;
+    qrPager.classList.add("hidden");
   }
 
   btnCloseQR.addEventListener("click", closeQR);
   qrModal.addEventListener("click", (e) => { if (e.target === qrModal) closeQR(); });
+
+  btnQrPrev.addEventListener("click", () => {
+    if (qrParts.length <= 1) return;
+    qrIdx = (qrIdx - 1 + qrParts.length) % qrParts.length;
+    renderQrAt(qrIdx);
+  });
+  btnQrNext.addEventListener("click", () => {
+    if (qrParts.length <= 1) return;
+    qrIdx = (qrIdx + 1) % qrParts.length;
+    renderQrAt(qrIdx);
+  });
+
+  window.addEventListener("resize", () => {
+    if (!qrModal.classList.contains("hidden") && qrParts.length) renderQrAt(qrIdx);
+  });
 
   // ===== QR scan modal (collect split parts) =====
   let html5Qr = null;
@@ -506,7 +607,7 @@
     scanCollect.map.set(bm.i, bm.chunk);
 
     const got = scanCollect.map.size;
-    scanProgress.textContent = `受信中：${got} / ${scanCollect.total}`;
+    scanProgress.textContent = `受信中：${got} / ${scanCollect.total}（同じQRを読むと進みます）`;
 
     if (got >= scanCollect.total) {
       let full = "";
@@ -518,8 +619,11 @@
   async function startScanner() {
     qrReader.innerHTML = "";
     html5Qr = new Html5Qrcode("qrReader");
-    scanHint.textContent = "カメラを向けてください（読み取り後、自動で進みます）";
-    const config = { fps: 10, qrbox: { width: 240, height: 240 } };
+    scanHint.textContent = "カメラを向けてください（読めたら自動で次に進みます）";
+
+    const box = Math.min(280, Math.max(220, window.innerWidth - 180));
+    const config = { fps: 12, qrbox: { width: box, height: box } };
+
     await html5Qr.start(
       { facingMode: scanFacing },
       config,
@@ -580,8 +684,8 @@
   btnModeRecv.addEventListener("click", () => setMode("recv"));
   setMode("send");
 
-  // ====== ICE gather (短時間だけ待つ：固まらない) ======
-  async function gatherIceQuick(pc, maxMs=2200) {
+  // ====== ICE gather (固まらない：短時間で打ち切り) ======
+  async function gatherIceQuick(pc, maxMs=2000) {
     const t0 = performance.now();
     let lastCand = performance.now();
     let hasAny = false;
@@ -597,31 +701,17 @@
       const tick = () => {
         const now = performance.now();
         const doneByState = (pc.iceGatheringState === "complete");
-        const doneByIdle = hasAny && (now - lastCand > 220);
+        const doneByIdle = hasAny && (now - lastCand > 250);
         const doneByMax = (now - t0 > maxMs);
         if (doneByState || doneByIdle || doneByMax) {
           pc.removeEventListener("icecandidate", onCand);
           resolve();
           return;
         }
-        setTimeout(tick, 120);
+        setTimeout(tick, 140);
       };
       tick();
     });
-  }
-
-  // ====== Signal format（最小） ======
-  // Offer: "O1\n<SDP>"
-  // Answer:"A1\n<SDP>"
-  function makeOfferSignal(sdp) { return "O1\n" + (sdp || ""); }
-  function makeAnswerSignal(sdp){ return "A1\n" + (sdp || ""); }
-
-  function parseSignal(text) {
-    const t = (text || "").replace(/\r\n/g, "\n");
-    if (t.startsWith("O1\n")) return { kind: "offer", sdp: t.slice(3) };
-    if (t.startsWith("A1\n")) return { kind: "answer", sdp: t.slice(3) };
-    // 旧/混在に備え：offer/answerを推測できない場合はnull
-    return null;
   }
 
   // ====== Sender logic ======
@@ -734,34 +824,34 @@
     }
   }
 
-  async function makeOfferSignalString() {
+  async function makeOfferPackedForQr() {
     if (!sendStream) throw new Error("先に「カメラ開始」をしてください。");
 
-    // 既存PCがあれば閉じる
     try { if (sendPc) sendPc.close(); } catch {}
     sendPc = null;
 
     sendPc = new RTCPeerConnection(pcConfig);
     sendPc.onconnectionstatechange = () => { sendConn.textContent = sendPc.connectionState; };
 
-    // track追加
     sendStream.getTracks().forEach(tr => sendPc.addTrack(tr, sendStream));
 
-    // Offer作成
     const offer = await sendPc.createOffer();
     await sendPc.setLocalDescription(offer);
 
-    // “短時間だけ”ICEを集めてSDPにcandidateを載せる
-    await gatherIceQuick(sendPc, 2200);
+    await gatherIceQuick(sendPc, 2000);
 
     const sdp = filterHostCandidatesInSdp(sendPc.localDescription?.sdp || "");
-    return makeOfferSignal(sdp);
+    const signal = makeOfferSignal(sdp);
+
+    // ★ここで圧縮して短く
+    return await packTextForQr(signal);
   }
 
-  async function applyAnswerFromSignalString(signalText) {
+  async function applyAnswerFromQrText(qrText) {
     if (!sendPc) throw new Error("先にOfferのQRを表示してください。");
 
-    const parsed = parseSignal(signalText);
+    const raw = await unpackTextFromQr(qrText);
+    const parsed = parseSignal(raw);
     if (!parsed || parsed.kind !== "answer") throw new Error("AnswerのQRではありません。");
 
     const sdp = filterHostCandidatesInSdp(parsed.sdp || "");
@@ -789,17 +879,17 @@
   btnFullLocal.addEventListener("click", () => requestVideoFullscreen(localVideo));
   localVideo.addEventListener("dblclick", () => requestVideoFullscreen(localVideo));
 
-  // ★押したら即QR画面 → 裏でOffer作ってQRを差し替え
+  // Offer：先にモーダル→生成→QR確定（分割時は手動送り）
   btnShowOfferQRNow.addEventListener("click", async () => {
     try {
       btnShowOfferQRNow.disabled = true;
       globalState.textContent = "送信：Offer作成中…";
 
-      // 先にモーダルを出す（体感“即”）
-      showQrModal("Offer（受信側でQR読取）", "準備中…");
+      showQrModal("Offer（受信側でQR読取）");
+      qrHint.textContent = "受信端末で読み取ってください（分割なら手動送り）";
 
-      const offerSignal = await makeOfferSignalString();
-      setQrContent(offerSignal);
+      const packedOffer = await makeOfferPackedForQr();
+      setQrContentPacked(packedOffer);
 
       globalState.textContent = "送信：Offer QR表示中";
       btnScanAnswerQR.disabled = false;
@@ -813,13 +903,13 @@
     }
   });
 
-  // Answer QRを読取 → 自動接続
+  // Answer：読取→自動接続
   btnScanAnswerQR.addEventListener("click", async () => {
     try {
       await openScan("Answer QR読取（送信側）", async (val) => {
         try {
           globalState.textContent = "送信：接続中…";
-          await applyAnswerFromSignalString(val);
+          await applyAnswerFromQrText(val);
           globalState.textContent = "送信：接続処理OK（状態を確認）";
         } catch (e) {
           globalState.textContent = "エラー";
@@ -861,11 +951,11 @@
     globalState.textContent = "受信：待機中";
   }
 
-  async function makeAnswerFromOfferSignalString(signalText) {
-    const parsed = parseSignal(signalText);
+  async function makeAnswerPackedForQrFromOfferQrText(offerQrText) {
+    const offerRaw = await unpackTextFromQr(offerQrText);
+    const parsed = parseSignal(offerRaw);
     if (!parsed || parsed.kind !== "offer") throw new Error("OfferのQRではありません。");
 
-    // 既存PCがあれば閉じる
     try { if (recvPc) recvPc.close(); } catch {}
     recvPc = null;
 
@@ -884,7 +974,6 @@
       btnFullRemote.disabled = false;
       btnResetRecv.disabled = false;
 
-      // iOSは失敗してもOK（再生ボタンで）
       remoteVideo.play().catch(() => {});
     };
 
@@ -894,27 +983,31 @@
     const answer = await recvPc.createAnswer();
     await recvPc.setLocalDescription(answer);
 
-    await gatherIceQuick(recvPc, 2200);
+    await gatherIceQuick(recvPc, 2000);
 
     const sdp = filterHostCandidatesInSdp(recvPc.localDescription?.sdp || "");
-    return makeAnswerSignal(sdp);
+    const signal = makeAnswerSignal(sdp);
+
+    // ★圧縮して短く
+    return await packTextForQr(signal);
   }
 
-  // Offer QR読取 → 読み取り完了後に “自動でAnswer作成してQR表示”
+  // Offer読取 → Answer作成 → Answer QR表示（分割なら手動送り）
   btnScanOfferQR.addEventListener("click", async () => {
     try {
       await openScan("Offer QR読取（受信側）", async (val) => {
         try {
           globalState.textContent = "受信：Answer作成中…";
 
-          // 先にAnswerモーダルを出す（体感“即”）
-          showQrModal("Answer（送信側でQR読取）", "準備中…");
+          showQrModal("Answer（送信側でQR読取）");
+          qrHint.textContent = "送信端末で読み取ってください（分割なら手動送り）";
 
-          const answerSignal = await makeAnswerFromOfferSignalString(val);
-          setQrContent(answerSignal);
+          const packedAnswer = await makeAnswerPackedForQrFromOfferQrText(val);
+          setQrContentPacked(packedAnswer);
 
           globalState.textContent = "受信：Answer QR表示中";
           recvConn.textContent = "Answer作成済";
+          btnResetRecv.disabled = false;
         } catch (e) {
           closeQR();
           globalState.textContent = "エラー";
