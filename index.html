@@ -3,55 +3,46 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>ベビーモニター（LAN限定 / 1ファイル / QRのみ）</title>
-
-  <!-- Tailwind -->
+  <title>ベビーモニター（LAN限定 / 1ファイル）</title>
   <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- QR生成（表示） -->
-  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-
-  <!-- QR読取（スキャン） -->
-  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-
   <style>
     body { -webkit-tap-highlight-color: transparent; }
     video { background:#000; }
     .night { filter: brightness(1.9) contrast(1.45) saturate(0.85); }
+    .glass { backdrop-filter: blur(10px); }
   </style>
 </head>
-
 <body class="bg-slate-50 text-slate-800">
   <div class="max-w-4xl mx-auto p-4 space-y-4">
     <!-- Header -->
     <header class="space-y-2">
       <div class="flex items-center justify-between gap-2 flex-wrap">
-        <div class="text-xl font-black">ベビーモニター（同じWi-Fi内 / QRのみ / 1ファイル）</div>
-        <div class="text-xs font-bold px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-          LAN限定（外部接続不可想定）
+        <div class="text-xl font-black">ベビーモニター（同じWi-Fi内 / 1ファイル）</div>
+        <div id="badgeLan" class="text-xs font-bold px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+          LAN限定モード
         </div>
       </div>
       <div class="text-xs text-slate-500 leading-relaxed">
-        ※HTTPS必須（GitHub Pages等）。同じWi-Fi内で使ってください（ゲストWi-Fiの端末隔離があると接続できません）。<br/>
-        ※医療機器ではありません。短時間の“補助”用途を想定しています。
+        ※医療機器ではありません。短時間の“補助”用途を想定しています。<br/>
+        ※HTTPS必須（GitHub Pages等）。同じWi-Fi内で使ってください（ゲストWi-Fi等の端末隔離があると接続できません）。
       </div>
     </header>
 
-    <!-- Mode -->
+    <!-- Mode & Password -->
     <section class="bg-white rounded-3xl border border-slate-200 p-4 space-y-4 shadow-sm">
       <div class="flex items-center justify-between gap-3 flex-wrap">
-        <div class="font-black text-slate-700">0）モード選択</div>
-        <div class="text-xs text-slate-500">パスワード不要／QRだけで接続</div>
+        <div class="font-black text-slate-700">0）モードとパスワード</div>
+        <div class="text-xs text-slate-500">同じパスワードでのみ復号・接続できます</div>
       </div>
 
       <div class="grid md:grid-cols-2 gap-3">
         <div class="bg-slate-50 rounded-2xl p-3 border border-slate-200">
-          <div class="text-sm font-bold text-slate-700 mb-2">モード</div>
+          <div class="text-sm font-bold text-slate-700 mb-2">モード選択</div>
           <div class="grid grid-cols-2 gap-2">
-            <button id="btnModeSend" class="px-3 py-3 rounded-2xl font-black border border-slate-200 bg-white hover:bg-slate-100 active:scale-[0.99]">
+            <button id="btnModeSend" class="px-3 py-3 rounded-2xl font-black border border-slate-200 bg-white hover:bg-slate-100">
               👶 送信（ベビー側）
             </button>
-            <button id="btnModeRecv" class="px-3 py-3 rounded-2xl font-black border border-slate-200 bg-white hover:bg-slate-100 active:scale-[0.99]">
+            <button id="btnModeRecv" class="px-3 py-3 rounded-2xl font-black border border-slate-200 bg-white hover:bg-slate-100">
               👀 受信（見守り側）
             </button>
           </div>
@@ -61,82 +52,87 @@
         </div>
 
         <div class="bg-slate-50 rounded-2xl p-3 border border-slate-200 space-y-2">
-          <div class="text-sm font-bold text-slate-700">状態</div>
-          <div class="text-sm">
-            <span class="text-slate-500">現在：</span><span id="globalState" class="font-black text-slate-700">待機中</span>
+          <div class="flex items-center justify-between">
+            <div class="text-sm font-bold text-slate-700">パスワード（例：6〜12桁）</div>
+            <button id="btnTogglePw" class="text-xs font-bold px-3 py-1 rounded-full bg-white border border-slate-200">表示</button>
           </div>
+          <input id="pw" type="password" class="w-full rounded-2xl border border-slate-200 px-4 py-3 font-bold"
+                 placeholder="同じパスワードを両端末で入力" />
           <div class="text-xs text-slate-500">
-            ヒント：<span id="uaHint"></span><br/>
-            ※iPhone/iPadは受信側で「▶再生」を押すと安定します。
+            このパスワードは端末内で暗号鍵に変換され、Offer/Answerコードを暗号化します（サーバ不要）。
           </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <div class="text-sm">
+          状態：<span id="globalState" class="font-black text-slate-700">待機中</span>
+        </div>
+        <div class="text-xs text-slate-500">
+          ブラウザ：<span id="uaHint"></span>
         </div>
       </div>
     </section>
 
     <!-- SEND VIEW -->
     <section id="sendView" class="space-y-4 hidden">
+      <!-- Step 1: camera -->
       <section class="bg-white rounded-3xl border border-slate-200 p-4 space-y-4 shadow-sm">
         <div class="flex items-center justify-between gap-2 flex-wrap">
-          <div class="font-black text-slate-700">送信（ベビー側）</div>
+          <div class="font-black text-slate-700">1）カメラ・音声を開始（最高画質）</div>
           <div class="flex items-center gap-2">
-            <button id="btnStartCam" class="px-4 py-2 rounded-2xl bg-sky-600 text-white font-black active:scale-[0.99]">カメラ開始</button>
-            <button id="btnStopAllSend" class="px-4 py-2 rounded-2xl bg-slate-200 font-black active:scale-[0.99]" disabled>停止</button>
+            <button id="btnStartCam" class="px-4 py-2 rounded-2xl bg-sky-600 text-white font-black">カメラ開始</button>
+            <button id="btnStopAllSend" class="px-4 py-2 rounded-2xl bg-slate-200 font-black" disabled>停止</button>
           </div>
         </div>
 
         <div class="grid md:grid-cols-2 gap-4">
-          <!-- Preview -->
           <div class="space-y-2">
-            <div class="flex items-center justify-between">
-              <div class="text-sm font-bold text-slate-600">プレビュー</div>
-              <button id="btnFullLocal" class="px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold active:scale-[0.99]" disabled>⛶ 全画面</button>
-            </div>
+            <div class="text-sm font-bold text-slate-600">プレビュー</div>
             <video id="localVideo" class="w-full rounded-3xl aspect-video" playsinline muted autoplay></video>
 
             <div class="grid grid-cols-2 gap-2">
-              <button id="btnFlipCam" class="px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold active:scale-[0.99]" disabled>📷 前/後切替</button>
-              <button id="btnMicMute" class="px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold active:scale-[0.99]" disabled>🎤 マイク：ON</button>
-              <button id="btnNightLocal" class="px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold active:scale-[0.99]" disabled>🌙 暗視：OFF</button>
-              <button id="btnTorch" class="px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold active:scale-[0.99]" disabled>🔦 ライト：OFF</button>
+              <button id="btnFlipCam" class="px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold" disabled>📷 前/後切替</button>
+              <button id="btnMicMute" class="px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold" disabled>🎤 マイク：ON</button>
+              <button id="btnNightLocal" class="px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold" disabled>🌙 暗視：OFF</button>
+              <button id="btnTorch" class="px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold" disabled>🔦 ライト：OFF</button>
             </div>
 
             <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs text-slate-600">
               <div class="font-bold text-slate-700 mb-1">実際の撮影設定</div>
               <div id="camInfo">未開始</div>
-              <div class="mt-1 text-slate-500">※「最高画質」を理想値で要求し、端末が可能な最大に寄せます。</div>
-            </div>
-
-            <div class="text-xs text-slate-500">
-              ※暗視は「疑似（明るさ/コントラスト強調）」です。赤外線暗視は端末ハード依存で、Webアプリから追加できません。
+              <div class="mt-1 text-slate-500">※端末が対応する範囲で最大になります（理想値：4K/30fps）。</div>
             </div>
           </div>
 
-          <!-- Flow -->
-          <div class="space-y-3">
+          <div class="space-y-2">
+            <div class="text-sm font-bold text-slate-600">接続の流れ（送信側）</div>
+
             <div class="bg-indigo-50 border border-indigo-200 rounded-2xl p-3 text-sm">
-              <div class="font-black text-indigo-900">1）OfferのQRを表示</div>
-              <div class="text-indigo-700 text-xs mt-1">押すとすぐQR画面が出ます（裏でOffer生成）</div>
-              <div class="mt-2">
-                <button id="btnShowOfferQRNow" class="w-full px-4 py-4 rounded-3xl bg-indigo-600 text-white font-black text-base active:scale-[0.99]" disabled>
-                  📷 Offer QR を表示する
-                </button>
+              <div class="font-black text-indigo-900">2）Offerコードを作成して渡す</div>
+              <div class="text-indigo-700 text-xs mt-1">「Offer作成」→コピー→受信側へ貼り付け</div>
+              <div class="mt-2 flex gap-2 flex-wrap">
+                <button id="btnMakeOffer" class="px-4 py-2 rounded-2xl bg-indigo-600 text-white font-black" disabled>Offer作成</button>
+                <button id="btnCopyOffer" class="px-4 py-2 rounded-2xl bg-slate-200 font-black" disabled>Offerをコピー</button>
               </div>
+              <textarea id="offerOut" class="mt-2 w-full h-28 rounded-2xl border border-indigo-200 p-3 text-xs font-mono"
+                        placeholder="Offerコード（暗号化済み）がここに出ます" readonly></textarea>
             </div>
 
             <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 text-sm">
-              <div class="font-black text-emerald-900">2）Answerを読み取ると自動接続</div>
-              <div class="text-emerald-700 text-xs mt-1">受信側が返したAnswerのQRを読み取ります</div>
-              <div class="mt-2">
-                <button id="btnScanAnswerQR" class="w-full px-4 py-4 rounded-3xl border border-emerald-200 bg-white font-black text-base active:scale-[0.99]" disabled>
-                  📷 Answer QR を読取 → 自動接続
-                </button>
+              <div class="font-black text-emerald-900">3）Answerコードを受け取って接続</div>
+              <div class="text-emerald-700 text-xs mt-1">受信側で作ったAnswerを貼り付け→「接続」</div>
+              <div class="mt-2 flex gap-2 flex-wrap">
+                <button id="btnConnectSend" class="px-4 py-2 rounded-2xl bg-emerald-600 text-white font-black" disabled>接続</button>
               </div>
+              <textarea id="answerIn" class="mt-2 w-full h-28 rounded-2xl border border-emerald-200 p-3 text-xs font-mono"
+                        placeholder="Answerコード（暗号化済み）を貼り付け"></textarea>
             </div>
 
             <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-sm">
               <div class="font-black text-slate-700">接続状態</div>
               <div class="mt-1 text-sm">Peer：<span id="sendConn" class="font-black">未接続</span></div>
-              <div class="text-xs text-slate-500 mt-1">※LAN候補のみ（外部からは基本接続不可の作り）</div>
+              <div class="text-xs text-slate-500 mt-1">※LAN限定（host候補のみ）。外部回線からは基本的に接続できません。</div>
             </div>
           </div>
         </div>
@@ -147,52 +143,56 @@
     <section id="recvView" class="space-y-4 hidden">
       <section class="bg-white rounded-3xl border border-slate-200 p-4 space-y-4 shadow-sm">
         <div class="flex items-center justify-between gap-2 flex-wrap">
-          <div class="font-black text-slate-700">受信（見守り側）</div>
+          <div class="font-black text-slate-700">1）Offerコードを受け取ってAnswerを返す</div>
           <div class="flex items-center gap-2">
-            <button id="btnResetRecv" class="px-4 py-2 rounded-2xl bg-slate-200 font-black active:scale-[0.99]" disabled>切断/リセット</button>
+            <button id="btnResetRecv" class="px-4 py-2 rounded-2xl bg-slate-200 font-black" disabled>切断/リセット</button>
           </div>
         </div>
 
         <div class="grid md:grid-cols-2 gap-4">
-          <!-- Offer/Answer -->
           <div class="space-y-2">
             <div class="bg-indigo-50 border border-indigo-200 rounded-2xl p-3 text-sm">
-              <div class="font-black text-indigo-900">1）Offerを読取 → AnswerのQRを自動表示</div>
-              <div class="text-indigo-700 text-xs mt-1">ボタンを押して、送信側のOffer QRを読み取るだけ</div>
-              <div class="mt-2">
-                <button id="btnScanOfferQR" class="w-full px-4 py-4 rounded-3xl border border-indigo-200 bg-white font-black text-base active:scale-[0.99]">
-                  📷 Offer QR を読取（自動でAnswer表示）
-                </button>
+              <div class="font-black text-indigo-900">Offerコード（送信側→受信側）</div>
+              <textarea id="offerIn" class="mt-2 w-full h-28 rounded-2xl border border-indigo-200 p-3 text-xs font-mono"
+                        placeholder="送信側のOfferコードを貼り付け"></textarea>
+              <div class="mt-2 flex gap-2 flex-wrap">
+                <button id="btnMakeAnswer" class="px-4 py-2 rounded-2xl bg-indigo-600 text-white font-black">Answer作成</button>
               </div>
+            </div>
+
+            <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 text-sm">
+              <div class="font-black text-emerald-900">Answerコード（受信側→送信側）</div>
+              <div class="text-emerald-700 text-xs mt-1">作成→コピー→送信側に貼り付け</div>
+              <div class="mt-2 flex gap-2 flex-wrap">
+                <button id="btnCopyAnswer" class="px-4 py-2 rounded-2xl bg-slate-200 font-black" disabled>Answerをコピー</button>
+              </div>
+              <textarea id="answerOut" class="mt-2 w-full h-28 rounded-2xl border border-emerald-200 p-3 text-xs font-mono"
+                        placeholder="Answerコード（暗号化済み）がここに出ます" readonly></textarea>
             </div>
 
             <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-sm">
               <div class="font-black text-slate-700">接続状態</div>
               <div class="mt-1 text-sm">Peer：<span id="recvConn" class="font-black">未接続</span></div>
-              <div class="text-xs text-slate-500 mt-1">iPhone/iPadは自動再生制限があるため「▶再生」を押すと安定します。</div>
+              <div class="text-xs text-slate-500 mt-1">iPhone/iPadは自動再生制限があるため、映像が出ても音が出ない時は「再生」を押してください。</div>
             </div>
           </div>
 
-          <!-- Video -->
           <div class="space-y-2">
-            <div class="flex items-center justify-between">
-              <div class="text-sm font-bold text-slate-600">受信映像</div>
-              <button id="btnFullRemote" class="px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold active:scale-[0.99]" disabled>⛶ 全画面</button>
-            </div>
+            <div class="text-sm font-bold text-slate-600">受信映像</div>
             <video id="remoteVideo" class="w-full rounded-3xl aspect-video" playsinline autoplay></video>
 
             <div class="grid grid-cols-2 gap-2">
-              <button id="btnPlayRemote" class="px-3 py-2 rounded-2xl bg-emerald-600 text-white font-black active:scale-[0.99]" disabled>▶ 再生</button>
-              <button id="btnSpkMute" class="px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold active:scale-[0.99]" disabled>🔈 音：ON</button>
-              <button id="btnNightRemote" class="px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold active:scale-[0.99]" disabled>🌙 暗視：OFF</button>
-              <button id="btnFullAlt" class="px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold active:scale-[0.99]" disabled>⛶（代替）</button>
+              <button id="btnPlayRemote" class="px-3 py-2 rounded-2xl bg-emerald-600 text-white font-black" disabled>▶ 再生</button>
+              <button id="btnSpkMute" class="px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold" disabled>🔈 音：ON</button>
+              <button id="btnNightRemote" class="px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold" disabled>🌙 暗視：OFF</button>
+              <button id="btnFull" class="px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold" disabled>⛶ 全画面</button>
             </div>
 
             <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs text-slate-600">
-              <div class="font-bold text-slate-700 mb-1">メモ</div>
+              <div class="font-bold text-slate-700 mb-1">受信のヒント</div>
               <ul class="list-disc pl-5 space-y-1">
-                <li>外部回線からは接続不可想定（LAN候補のみ）。</li>
-                <li>同じWi-Fiでも「端末隔離」があると接続できません。</li>
+                <li>同じWi-Fiでも「端末隔離（AP isolation）」があると接続できません（ホテル/一部ゲストWi-Fiなど）。</li>
+                <li>外部からの接続は想定しません（LAN候補のみで作っています）。</li>
               </ul>
             </div>
           </div>
@@ -201,65 +201,7 @@
     </section>
 
     <div class="text-[11px] text-slate-500 px-1">
-      ✅ 仕様：パスワードなし／テキスト入力なし。QRの読み取りだけで接続します。
-    </div>
-  </div>
-
-  <!-- QR: Show Modal -->
-  <div id="qrModal" class="fixed inset-0 hidden z-50">
-    <div class="absolute inset-0 bg-black/55"></div>
-    <div class="absolute inset-0 flex items-center justify-center p-4">
-      <div class="w-full max-w-md bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
-        <div class="p-4 border-b border-slate-200 flex items-center justify-between">
-          <div>
-            <div id="qrTitle" class="font-black text-slate-800">QR</div>
-            <div id="qrMeta" class="text-[11px] text-slate-500 mt-0.5"></div>
-            <div class="text-xs text-slate-500">相手の端末で「QR読取」してください</div>
-          </div>
-          <button id="btnCloseQR" class="px-3 py-2 rounded-2xl bg-slate-200 font-black active:scale-[0.99]">閉じる</button>
-        </div>
-        <div class="p-4 space-y-3">
-          <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3 flex items-center justify-center">
-            <div id="qrBox"></div>
-          </div>
-          <div id="qrFoot" class="text-[11px] text-slate-500">
-            ※長い場合は「分割QR」を自動で切り替えて表示します。
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- QR: Scan Modal -->
-  <div id="scanModal" class="fixed inset-0 hidden z-50">
-    <div class="absolute inset-0 bg-black/65"></div>
-    <div class="absolute inset-0 flex items-center justify-center p-4">
-      <div class="w-full max-w-md bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
-        <div class="p-4 border-b border-slate-200 flex items-center justify-between">
-          <div>
-            <div id="scanTitle" class="font-black text-slate-800">QR読取</div>
-            <div id="scanHint" class="text-xs text-slate-500">カメラを向けてください</div>
-            <div id="scanProgress" class="text-xs font-black text-slate-600 mt-1"></div>
-          </div>
-          <button id="btnCloseScan" class="px-3 py-2 rounded-2xl bg-slate-200 font-black active:scale-[0.99]">閉じる</button>
-        </div>
-        <div class="p-4 space-y-3">
-          <div class="bg-slate-50 border border-slate-200 rounded-2xl p-2">
-            <div id="qrReader" class="w-full"></div>
-          </div>
-          <div class="flex gap-2">
-            <button id="btnSwitchCam" class="flex-1 px-3 py-2 rounded-2xl border border-slate-200 bg-white font-black active:scale-[0.99]">
-              🔁 カメラ切替
-            </button>
-            <button id="btnCloseScan2" class="flex-1 px-3 py-2 rounded-2xl bg-emerald-600 text-white font-black active:scale-[0.99]">
-              閉じる
-            </button>
-          </div>
-          <div class="text-xs text-slate-500">
-            ※iOSは許可ダイアログが出ます。拒否すると読取できません。
-          </div>
-        </div>
-      </div>
+      🔒 このアプリは「接続情報をパスワードで暗号化」します。パスワードが違うと復号できず、接続できません。
     </div>
   </div>
 
@@ -274,6 +216,8 @@
   const btnModeRecv = $("btnModeRecv");
   const sendView = $("sendView");
   const recvView = $("recvView");
+  const pwEl = $("pw");
+  const btnTogglePw = $("btnTogglePw");
 
   // Send UI
   const btnStartCam = $("btnStartCam");
@@ -284,355 +228,155 @@
   const btnTorch = $("btnTorch");
   const localVideo = $("localVideo");
   const camInfo = $("camInfo");
-  const btnShowOfferQRNow = $("btnShowOfferQRNow");
-  const btnScanAnswerQR = $("btnScanAnswerQR");
+  const btnMakeOffer = $("btnMakeOffer");
+  const btnCopyOffer = $("btnCopyOffer");
+  const offerOut = $("offerOut");
+  const answerIn = $("answerIn");
+  const btnConnectSend = $("btnConnectSend");
   const sendConn = $("sendConn");
-  const btnFullLocal = $("btnFullLocal");
 
   // Recv UI
   const btnResetRecv = $("btnResetRecv");
-  const btnScanOfferQR = $("btnScanOfferQR");
+  const offerIn = $("offerIn");
+  const btnMakeAnswer = $("btnMakeAnswer");
+  const answerOut = $("answerOut");
+  const btnCopyAnswer = $("btnCopyAnswer");
   const recvConn = $("recvConn");
   const remoteVideo = $("remoteVideo");
   const btnPlayRemote = $("btnPlayRemote");
   const btnSpkMute = $("btnSpkMute");
   const btnNightRemote = $("btnNightRemote");
-  const btnFullAlt = $("btnFullAlt");
-  const btnFullRemote = $("btnFullRemote");
+  const btnFull = $("btnFull");
 
-  // QR Modals
-  const qrModal = $("qrModal");
-  const qrTitle = $("qrTitle");
-  const qrMeta = $("qrMeta");
-  const qrBox = $("qrBox");
-  const btnCloseQR = $("btnCloseQR");
-
-  const scanModal = $("scanModal");
-  const scanTitle = $("scanTitle");
-  const scanHint = $("scanHint");
-  const scanProgress = $("scanProgress");
-  const qrReader = $("qrReader");
-  const btnCloseScan = $("btnCloseScan");
-  const btnCloseScan2 = $("btnCloseScan2");
-  const btnSwitchCam = $("btnSwitchCam");
-
-  uaHint.textContent = (navigator.userAgent.includes("iPhone") || navigator.userAgent.includes("iPad"))
-    ? "iOS（受信側は▶再生が必要な場合あり）"
+  uaHint.textContent = navigator.userAgent.includes("iPhone") || navigator.userAgent.includes("iPad")
+    ? "iOS（再生ボタンが必要な場合あり）"
     : "OK";
 
   // ====== LAN-only WebRTC policy ======
-  // STUN/TURNなし（外部接続を避ける意図）
+  // STUN/TURNなし + host候補のみを利用（外部回線からの接続を避ける意図）
   const pcConfig = { iceServers: [] };
 
-  function isHostCandidateLine(line) {
-    // a=candidate:... typ host ...
-    return / typ host /i.test(line);
+  function isHostCandidate(candStr) {
+    // "typ host" のみ
+    return / typ host /i.test(candStr);
   }
 
-  function filterHostCandidatesInSdp(sdp) {
-    const lines = (sdp || "").split(/\r\n|\n/);
-    const kept = [];
-    for (const line of lines) {
-      if (line.startsWith("a=candidate:")) {
-        if (isHostCandidateLine(line)) kept.push(line);
-      } else {
-        kept.push(line);
-      }
-    }
-    // SDPはCRLF推奨
-    return kept.join("\r\n").trim() + "\r\n";
+  // ====== Crypto (password-gated offer/answer) ======
+  const te = new TextEncoder();
+  const td = new TextDecoder();
+
+  function b64uEncode(u8) {
+    let s = btoa(String.fromCharCode(...u8));
+    return s.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  }
+  function b64uDecode(s) {
+    s = s.replace(/-/g, "+").replace(/_/g, "/");
+    while (s.length % 4) s += "=";
+    const bin = atob(s);
+    const u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    return u8;
   }
 
-  // ===== Fullscreen helper =====
-  async function requestVideoFullscreen(videoEl) {
-    if (!videoEl) return;
-    try {
-      if (videoEl.requestFullscreen) await videoEl.requestFullscreen();
-      else if (videoEl.webkitEnterFullscreen) videoEl.webkitEnterFullscreen(); // iOS
-    } catch {}
-  }
-
-  // ===== QR split protocol =====
-  // 1枚に収まらない場合、BM1|<id>|<i>/<n>|<chunk> で分割
-  function randId(len = 6) {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    let s = "";
-    for (let i = 0; i < len; i++) s += chars[Math.floor(Math.random() * chars.length)];
-    return s;
-  }
-
-  function makeQrSegments(text) {
-    const CHUNK = 850; // 安全側
-    if ((text || "").length <= CHUNK) {
-      return { raw: text, parts: [text] };
-    }
-    const id = randId();
-    const n = Math.ceil(text.length / CHUNK);
-    const parts = [];
-    for (let i = 0; i < n; i++) {
-      const chunk = text.slice(i * CHUNK, (i + 1) * CHUNK);
-      parts.push(`BM1|${id}|${i + 1}/${n}|${chunk}`);
-    }
-    return { raw: text, parts };
-  }
-
-  function parseBm1(text) {
-    // BM1|id|i/n|chunk
-    if (!text.startsWith("BM1|")) return null;
-    const a = text.split("|");
-    if (a.length < 4) return null;
-    const id = a[1];
-    const frac = a[2];
-    const chunk = a.slice(3).join("|");
-    const m = frac.match(/^(\d+)\/(\d+)$/);
-    if (!m) return null;
-    return { id, i: Number(m[1]), n: Number(m[2]), chunk };
-  }
-
-  // ===== QR modal: “即表示→後からQR描画” にする =====
-  let qrParts = [];
-  let qrIdx = 0;
-  let qrTimer = null;
-
-  function showQrModal(title, meta="") {
-    qrTitle.textContent = title;
-    qrMeta.textContent = meta;
-    qrBox.innerHTML = `
-      <div class="w-[280px] h-[280px] grid place-items-center">
-        <div class="text-sm font-black text-slate-600">生成中…</div>
-      </div>
-    `;
-    qrModal.classList.remove("hidden");
-  }
-
-  function setQrContent(text) {
-    const pack = makeQrSegments(text || "");
-    qrParts = pack.parts;
-    qrIdx = 0;
-
-    const render = (idx) => {
-      qrBox.innerHTML = "";
-      try {
-        new QRCode(qrBox, {
-          text: qrParts[idx],
-          width: 280,
-          height: 280,
-          correctLevel: QRCode.CorrectLevel.L
-        });
-      } catch {
-        qrBox.innerHTML = `<div class="text-sm font-bold text-rose-600">
-          QR生成に失敗しました。端末負荷が高い可能性があります（再読み込み→再試行）。
-        </div>`;
-      }
-      qrMeta.textContent = (qrParts.length <= 1) ? "" : `分割QR：${idx + 1} / ${qrParts.length}（自動切替）`;
-    };
-
-    render(0);
-
-    if (qrTimer) clearInterval(qrTimer);
-    if (qrParts.length > 1) {
-      qrTimer = setInterval(() => {
-        qrIdx = (qrIdx + 1) % qrParts.length;
-        render(qrIdx);
-      }, 800);
-    }
-  }
-
-  function closeQR() {
-    qrModal.classList.add("hidden");
-    qrBox.innerHTML = "";
-    qrMeta.textContent = "";
-    if (qrTimer) clearInterval(qrTimer);
-    qrTimer = null;
-    qrParts = [];
-    qrIdx = 0;
-  }
-
-  btnCloseQR.addEventListener("click", closeQR);
-  qrModal.addEventListener("click", (e) => { if (e.target === qrModal) closeQR(); });
-
-  // ===== QR scan modal (collect split parts) =====
-  let html5Qr = null;
-  let scanFacing = "environment";
-  let scanCollect = null; // { id, total, map }
-  let scanDone = false;
-  let scanAfter = null;
-
-  function resetScanCollect() {
-    scanCollect = null;
-    scanProgress.textContent = "";
-    scanDone = false;
-  }
-
-  async function stopScanner() {
-    try {
-      if (html5Qr) {
-        await html5Qr.stop();
-        await html5Qr.clear();
-      }
-    } catch {} finally {
-      html5Qr = null;
-      qrReader.innerHTML = "";
-    }
-  }
-
-  async function finishScan(val) {
-    if (scanDone) return;
-    scanDone = true;
-
-    const cb = scanAfter;
-    scanAfter = null;
-
-    await stopScanner();
-    scanModal.classList.add("hidden");
-    resetScanCollect();
-
-    if (cb) setTimeout(() => cb(val), 0);
-  }
-
-  async function handleScanDecoded(decodedText) {
-    const bm = parseBm1(decodedText);
-
-    // 1枚QR
-    if (!bm) {
-      await finishScan(decodedText);
-      return;
-    }
-
-    // 分割QR
-    if (!scanCollect || scanCollect.id !== bm.id) {
-      scanCollect = { id: bm.id, total: bm.n, map: new Map() };
-    }
-    scanCollect.map.set(bm.i, bm.chunk);
-
-    const got = scanCollect.map.size;
-    scanProgress.textContent = `受信中：${got} / ${scanCollect.total}`;
-
-    if (got >= scanCollect.total) {
-      let full = "";
-      for (let i = 1; i <= scanCollect.total; i++) full += (scanCollect.map.get(i) || "");
-      await finishScan(full);
-    }
-  }
-
-  async function startScanner() {
-    qrReader.innerHTML = "";
-    html5Qr = new Html5Qrcode("qrReader");
-    scanHint.textContent = "カメラを向けてください（読み取り後、自動で進みます）";
-    const config = { fps: 10, qrbox: { width: 240, height: 240 } };
-    await html5Qr.start(
-      { facingMode: scanFacing },
-      config,
-      async (decodedText) => { await handleScanDecoded(decodedText); },
-      () => {}
+  async function deriveKey(pass, saltU8) {
+    const baseKey = await crypto.subtle.importKey(
+      "raw",
+      te.encode(pass),
+      { name: "PBKDF2" },
+      false,
+      ["deriveKey"]
+    );
+    return crypto.subtle.deriveKey(
+      {
+        name: "PBKDF2",
+        salt: saltU8,
+        iterations: 120000,
+        hash: "SHA-256"
+      },
+      baseKey,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["encrypt", "decrypt"]
     );
   }
 
-  async function openScan(title, afterCb) {
-    scanTitle.textContent = title;
-    scanAfter = afterCb || null;
-    resetScanCollect();
-    scanModal.classList.remove("hidden");
-    try {
-      await startScanner();
-    } catch {
-      scanHint.textContent = "カメラを開始できません（許可/HTTPS/他アプリ使用中を確認）";
+  async function encryptJSON(pass, obj) {
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const key = await deriveKey(pass, salt);
+    const plain = te.encode(JSON.stringify(obj));
+    const cipher = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plain));
+    return "v1." + b64uEncode(salt) + "." + b64uEncode(iv) + "." + b64uEncode(cipher);
+  }
+
+  async function decryptJSON(pass, blob) {
+    const parts = (blob || "").trim().split(".");
+    if (parts.length !== 4 || parts[0] !== "v1") throw new Error("形式が不正です");
+    const salt = b64uDecode(parts[1]);
+    const iv = b64uDecode(parts[2]);
+    const cipher = b64uDecode(parts[3]);
+    const key = await deriveKey(pass, salt);
+    const plainBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, cipher);
+    return JSON.parse(td.decode(new Uint8Array(plainBuf)));
+  }
+
+  function mustPw() {
+    const p = pwEl.value || "";
+    if (p.length < 4) throw new Error("パスワードを入力してください（4文字以上推奨）");
+    return p;
+  }
+
+  async function safeCopy(text) {
+    if (!text) return;
+    try { await navigator.clipboard.writeText(text); }
+    catch {
+      // fallback
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
     }
   }
 
-  async function closeScan() {
-    scanAfter = null;
-    await stopScanner();
-    scanModal.classList.add("hidden");
-    resetScanCollect();
-  }
-
-  btnCloseScan.addEventListener("click", closeScan);
-  btnCloseScan2.addEventListener("click", closeScan);
-  scanModal.addEventListener("click", (e) => { if (e.target === scanModal) closeScan(); });
-
-  btnSwitchCam.addEventListener("click", async () => {
-    scanFacing = (scanFacing === "environment") ? "user" : "environment";
-    scanHint.textContent = "カメラ切替中…";
-    await stopScanner();
-    resetScanCollect();
-    try { await startScanner(); }
-    catch { scanHint.textContent = "切替に失敗（閉じる→再試行）"; }
-  });
-
-  // ===== Mode =====
   function setMode(mode) {
+    // mode: "send" | "recv"
     if (mode === "send") {
       sendView.classList.remove("hidden");
       recvView.classList.add("hidden");
       btnModeSend.className = "px-3 py-3 rounded-2xl font-black border border-slate-200 bg-sky-50 text-sky-700";
-      btnModeRecv.className = "px-3 py-3 rounded-2xl font-black border border-slate-200 bg-white hover:bg-slate-100 active:scale-[0.99]";
+      btnModeRecv.className = "px-3 py-3 rounded-2xl font-black border border-slate-200 bg-white hover:bg-slate-100";
       globalState.textContent = "送信モード";
     } else {
       recvView.classList.remove("hidden");
       sendView.classList.add("hidden");
       btnModeRecv.className = "px-3 py-3 rounded-2xl font-black border border-slate-200 bg-emerald-50 text-emerald-700";
-      btnModeSend.className = "px-3 py-3 rounded-2xl font-black border border-slate-200 bg-white hover:bg-slate-100 active:scale-[0.99]";
+      btnModeSend.className = "px-3 py-3 rounded-2xl font-black border border-slate-200 bg-white hover:bg-slate-100";
       globalState.textContent = "受信モード";
     }
   }
+
   btnModeSend.addEventListener("click", () => setMode("send"));
   btnModeRecv.addEventListener("click", () => setMode("recv"));
   setMode("send");
 
-  // ====== ICE gather (短時間だけ待つ：固まらない) ======
-  async function gatherIceQuick(pc, maxMs=2200) {
-    const t0 = performance.now();
-    let lastCand = performance.now();
-    let hasAny = false;
-
-    const onCand = () => {
-      hasAny = true;
-      lastCand = performance.now();
-    };
-
-    pc.addEventListener("icecandidate", onCand);
-
-    return new Promise((resolve) => {
-      const tick = () => {
-        const now = performance.now();
-        const doneByState = (pc.iceGatheringState === "complete");
-        const doneByIdle = hasAny && (now - lastCand > 220);
-        const doneByMax = (now - t0 > maxMs);
-        if (doneByState || doneByIdle || doneByMax) {
-          pc.removeEventListener("icecandidate", onCand);
-          resolve();
-          return;
-        }
-        setTimeout(tick, 120);
-      };
-      tick();
-    });
-  }
-
-  // ====== Signal format（最小） ======
-  // Offer: "O1\n<SDP>"
-  // Answer:"A1\n<SDP>"
-  function makeOfferSignal(sdp) { return "O1\n" + (sdp || ""); }
-  function makeAnswerSignal(sdp){ return "A1\n" + (sdp || ""); }
-
-  function parseSignal(text) {
-    const t = (text || "").replace(/\r\n/g, "\n");
-    if (t.startsWith("O1\n")) return { kind: "offer", sdp: t.slice(3) };
-    if (t.startsWith("A1\n")) return { kind: "answer", sdp: t.slice(3) };
-    // 旧/混在に備え：offer/answerを推測できない場合はnull
-    return null;
-  }
+  btnTogglePw.addEventListener("click", () => {
+    const isPw = pwEl.type === "password";
+    pwEl.type = isPw ? "text" : "password";
+    btnTogglePw.textContent = isPw ? "非表示" : "表示";
+  });
 
   // ====== Sender logic ======
   let sendPc = null;
   let sendStream = null;
-  let currentFacing = "environment";
+  let currentFacing = "environment"; // "user" | "environment"
   let micOn = true;
   let nightLocalOn = false;
   let torchOn = false;
 
   async function startCameraHighest() {
+    // “最高画質”要求（端末が可能な最大へ）
     const constraints = {
       audio: true,
       video: {
@@ -642,18 +386,18 @@
         frameRate: { ideal: 30, max: 60 }
       }
     };
-
     sendStream = await navigator.mediaDevices.getUserMedia(constraints);
     localVideo.srcObject = sendStream;
 
+    // UI enable
     btnStopAllSend.disabled = false;
     btnFlipCam.disabled = false;
     btnMicMute.disabled = false;
     btnNightLocal.disabled = false;
     btnTorch.disabled = false;
-    btnShowOfferQRNow.disabled = false;
-    btnFullLocal.disabled = false;
+    btnMakeOffer.disabled = false;
 
+    // show actual settings
     const vtrack = sendStream.getVideoTracks()[0];
     const atrack = sendStream.getAudioTracks()[0];
     const s = vtrack.getSettings ? vtrack.getSettings() : {};
@@ -664,24 +408,29 @@
       `音声：${atrack ? "有効" : "なし"}`
     ].join(" / ");
 
-    sendConn.textContent = "配信中（Offer QRへ）";
+    sendConn.textContent = "配信中（Offer作成へ）";
   }
 
   function stopSenderAll() {
     try { if (sendPc) sendPc.close(); } catch {}
     sendPc = null;
 
-    if (sendStream) sendStream.getTracks().forEach(t => t.stop());
+    if (sendStream) {
+      sendStream.getTracks().forEach(t => t.stop());
+    }
     sendStream = null;
+
+    offerOut.value = "";
+    answerIn.value = "";
+    btnCopyOffer.disabled = true;
+    btnConnectSend.disabled = true;
 
     btnStopAllSend.disabled = true;
     btnFlipCam.disabled = true;
     btnMicMute.disabled = true;
     btnNightLocal.disabled = true;
     btnTorch.disabled = true;
-    btnShowOfferQRNow.disabled = true;
-    btnScanAnswerQR.disabled = true;
-    btnFullLocal.disabled = true;
+    btnMakeOffer.disabled = true;
 
     micOn = true;
     btnMicMute.textContent = "🎤 マイク：ON";
@@ -690,17 +439,21 @@
     btnNightLocal.textContent = "🌙 暗視：OFF";
     torchOn = false;
     btnTorch.textContent = "🔦 ライト：OFF";
-    btnTorch.disabled = true;
-
     camInfo.textContent = "未開始";
+
     sendConn.textContent = "停止";
   }
 
   async function flipCamera() {
     currentFacing = (currentFacing === "environment") ? "user" : "environment";
+    // restart stream
+    stopSenderTracksOnly();
+    await startCameraHighest();
+  }
+
+  function stopSenderTracksOnly() {
     if (sendStream) sendStream.getTracks().forEach(t => t.stop());
     sendStream = null;
-    await startCameraHighest();
   }
 
   function toggleMic() {
@@ -722,112 +475,139 @@
     if (!sendStream) return;
     const vtrack = sendStream.getVideoTracks()[0];
     if (!vtrack) return;
+    // Torchは端末・ブラウザ対応が必要
     try {
       torchOn = !torchOn;
       await vtrack.applyConstraints({ advanced: [{ torch: torchOn }] });
       btnTorch.textContent = torchOn ? "🔦 ライト：ON" : "🔦 ライト：OFF";
-      btnTorch.disabled = false;
-    } catch {
+    } catch (e) {
       torchOn = false;
       btnTorch.textContent = "🔦 ライト：非対応";
       btnTorch.disabled = true;
     }
   }
 
-  async function makeOfferSignalString() {
-    if (!sendStream) throw new Error("先に「カメラ開始」をしてください。");
-
-    // 既存PCがあれば閉じる
-    try { if (sendPc) sendPc.close(); } catch {}
-    sendPc = null;
-
-    sendPc = new RTCPeerConnection(pcConfig);
-    sendPc.onconnectionstatechange = () => { sendConn.textContent = sendPc.connectionState; };
-
-    // track追加
-    sendStream.getTracks().forEach(tr => sendPc.addTrack(tr, sendStream));
-
-    // Offer作成
-    const offer = await sendPc.createOffer();
-    await sendPc.setLocalDescription(offer);
-
-    // “短時間だけ”ICEを集めてSDPにcandidateを載せる
-    await gatherIceQuick(sendPc, 2200);
-
-    const sdp = filterHostCandidatesInSdp(sendPc.localDescription?.sdp || "");
-    return makeOfferSignal(sdp);
+  function waitIceComplete(pc, timeoutMs=1500) {
+    return new Promise(resolve => {
+      if (pc.iceGatheringState === "complete") return resolve();
+      const t = setTimeout(() => {
+        pc.removeEventListener("icegatheringstatechange", onChange);
+        resolve();
+      }, timeoutMs);
+      function onChange() {
+        if (pc.iceGatheringState === "complete") {
+          clearTimeout(t);
+          pc.removeEventListener("icegatheringstatechange", onChange);
+          resolve();
+        }
+      }
+      pc.addEventListener("icegatheringstatechange", onChange);
+    });
   }
 
-  async function applyAnswerFromSignalString(signalText) {
-    if (!sendPc) throw new Error("先にOfferのQRを表示してください。");
+  async function makeOfferEncrypted() {
+    const pass = mustPw();
+    if (!sendStream) throw new Error("先にカメラ開始をしてください。");
 
-    const parsed = parseSignal(signalText);
-    if (!parsed || parsed.kind !== "answer") throw new Error("AnswerのQRではありません。");
+    sendPc = new RTCPeerConnection(pcConfig);
 
-    const sdp = filterHostCandidatesInSdp(parsed.sdp || "");
-    await sendPc.setRemoteDescription({ type: "answer", sdp });
+    // add tracks
+    sendStream.getTracks().forEach(tr => sendPc.addTrack(tr, sendStream));
+
+    const candidates = [];
+    sendPc.onicecandidate = (e) => {
+      if (!e.candidate) return;
+      const s = e.candidate.candidate || "";
+      if (isHostCandidate(s)) candidates.push(e.candidate);
+    };
+
+    sendPc.onconnectionstatechange = () => {
+      sendConn.textContent = sendPc.connectionState;
+    };
+
+    const offer = await sendPc.createOffer();
+    await sendPc.setLocalDescription(offer);
+    await waitIceComplete(sendPc);
+
+    const payload = {
+      sdp: sendPc.localDescription,
+      candidates
+    };
+
+    const blob = await encryptJSON(pass, payload);
+    offerOut.value = blob;
+    btnCopyOffer.disabled = false;
+    btnConnectSend.disabled = false;
+    sendConn.textContent = "Offer作成済（受信側へ渡してください）";
+  }
+
+  async function connectWithEncryptedAnswer() {
+    const pass = mustPw();
+    if (!sendPc) throw new Error("Offer作成後に接続してください。");
+    const blob = (answerIn.value || "").trim();
+    if (!blob) throw new Error("Answerコードを貼り付けてください。");
+
+    let payload;
+    try {
+      payload = await decryptJSON(pass, blob);
+    } catch (e) {
+      throw new Error("復号に失敗：パスワード違い／コードが壊れています。");
+    }
+
+    await sendPc.setRemoteDescription(payload.sdp);
+    if (Array.isArray(payload.candidates)) {
+      for (const c of payload.candidates) {
+        const s = c.candidate || "";
+        if (isHostCandidate(s)) {
+          try { await sendPc.addIceCandidate(c); } catch {}
+        }
+      }
+    }
     sendConn.textContent = "接続中…";
   }
 
   btnStartCam.addEventListener("click", async () => {
     try {
       globalState.textContent = "送信：カメラ開始中…";
-      btnTorch.disabled = false;
       await startCameraHighest();
       globalState.textContent = "送信：準備OK";
-    } catch {
+    } catch (e) {
       globalState.textContent = "エラー";
       alert("カメラ/マイクの許可が必要です（HTTPSで開いてください）。");
     }
   });
 
-  btnStopAllSend.addEventListener("click", stopSenderAll);
-  btnFlipCam.addEventListener("click", async () => { try { await flipCamera(); } catch { alert("カメラ切替に失敗しました"); } });
-  btnMicMute.addEventListener("click", toggleMic);
-  btnNightLocal.addEventListener("click", toggleNightLocal);
-  btnTorch.addEventListener("click", toggleTorch);
-  btnFullLocal.addEventListener("click", () => requestVideoFullscreen(localVideo));
-  localVideo.addEventListener("dblclick", () => requestVideoFullscreen(localVideo));
+  btnStopAllSend.addEventListener("click", () => stopSenderAll());
+  btnFlipCam.addEventListener("click", async () => {
+    try { await flipCamera(); } catch { alert("カメラ切替に失敗しました"); }
+  });
+  btnMicMute.addEventListener("click", () => toggleMic());
+  btnNightLocal.addEventListener("click", () => toggleNightLocal());
+  btnTorch.addEventListener("click", async () => await toggleTorch());
 
-  // ★押したら即QR画面 → 裏でOffer作ってQRを差し替え
-  btnShowOfferQRNow.addEventListener("click", async () => {
+  btnMakeOffer.addEventListener("click", async () => {
     try {
-      btnShowOfferQRNow.disabled = true;
       globalState.textContent = "送信：Offer作成中…";
-
-      // 先にモーダルを出す（体感“即”）
-      showQrModal("Offer（受信側でQR読取）", "準備中…");
-
-      const offerSignal = await makeOfferSignalString();
-      setQrContent(offerSignal);
-
-      globalState.textContent = "送信：Offer QR表示中";
-      btnScanAnswerQR.disabled = false;
-      sendConn.textContent = "Offer作成済（Answer待ち）";
+      await makeOfferEncrypted();
+      globalState.textContent = "送信：Offer作成済";
     } catch (e) {
-      closeQR();
       globalState.textContent = "エラー";
       alert(e.message || "Offer作成に失敗しました");
-    } finally {
-      btnShowOfferQRNow.disabled = false;
     }
   });
 
-  // Answer QRを読取 → 自動接続
-  btnScanAnswerQR.addEventListener("click", async () => {
+  btnCopyOffer.addEventListener("click", async () => {
+    await safeCopy(offerOut.value);
+  });
+
+  btnConnectSend.addEventListener("click", async () => {
     try {
-      await openScan("Answer QR読取（送信側）", async (val) => {
-        try {
-          globalState.textContent = "送信：接続中…";
-          await applyAnswerFromSignalString(val);
-          globalState.textContent = "送信：接続処理OK（状態を確認）";
-        } catch (e) {
-          globalState.textContent = "エラー";
-          alert(e.message || "接続に失敗しました");
-        }
-      });
-    } catch {
-      alert("QR読取を開始できませんでした。");
+      globalState.textContent = "送信：接続中…";
+      await connectWithEncryptedAnswer();
+      globalState.textContent = "送信：接続処理OK（状態を確認）";
+    } catch (e) {
+      globalState.textContent = "エラー";
+      alert(e.message || "接続に失敗しました");
     }
   });
 
@@ -843,11 +623,12 @@
     recvStream = null;
     remoteVideo.srcObject = null;
 
+    answerOut.value = "";
+    btnCopyAnswer.disabled = true;
     btnPlayRemote.disabled = true;
     btnSpkMute.disabled = true;
     btnNightRemote.disabled = true;
-    btnFullAlt.disabled = true;
-    btnFullRemote.disabled = true;
+    btnFull.disabled = true;
     btnResetRecv.disabled = true;
 
     spkOn = true;
@@ -861,16 +642,26 @@
     globalState.textContent = "受信：待機中";
   }
 
-  async function makeAnswerFromOfferSignalString(signalText) {
-    const parsed = parseSignal(signalText);
-    if (!parsed || parsed.kind !== "offer") throw new Error("OfferのQRではありません。");
+  async function makeAnswerEncrypted() {
+    const pass = mustPw();
+    const blob = (offerIn.value || "").trim();
+    if (!blob) throw new Error("Offerコードを貼り付けてください。");
 
-    // 既存PCがあれば閉じる
-    try { if (recvPc) recvPc.close(); } catch {}
-    recvPc = null;
+    let offerPayload;
+    try {
+      offerPayload = await decryptJSON(pass, blob);
+    } catch (e) {
+      throw new Error("復号に失敗：パスワード違い／コードが壊れています。");
+    }
 
     recvPc = new RTCPeerConnection(pcConfig);
-    recvPc.onconnectionstatechange = () => { recvConn.textContent = recvPc.connectionState; };
+
+    const candidates = [];
+    recvPc.onicecandidate = (e) => {
+      if (!e.candidate) return;
+      const s = e.candidate.candidate || "";
+      if (isHostCandidate(s)) candidates.push(e.candidate);
+    };
 
     recvPc.ontrack = (e) => {
       if (!recvStream) recvStream = new MediaStream();
@@ -880,53 +671,62 @@
       btnPlayRemote.disabled = false;
       btnSpkMute.disabled = false;
       btnNightRemote.disabled = false;
-      btnFullAlt.disabled = false;
-      btnFullRemote.disabled = false;
+      btnFull.disabled = false;
       btnResetRecv.disabled = false;
 
-      // iOSは失敗してもOK（再生ボタンで）
+      // try autoplay
       remoteVideo.play().catch(() => {});
     };
 
-    const offerSdp = filterHostCandidatesInSdp(parsed.sdp || "");
-    await recvPc.setRemoteDescription({ type: "offer", sdp: offerSdp });
+    recvPc.onconnectionstatechange = () => {
+      recvConn.textContent = recvPc.connectionState;
+    };
+
+    await recvPc.setRemoteDescription(offerPayload.sdp);
+    if (Array.isArray(offerPayload.candidates)) {
+      for (const c of offerPayload.candidates) {
+        const s = c.candidate || "";
+        if (isHostCandidate(s)) {
+          try { await recvPc.addIceCandidate(c); } catch {}
+        }
+      }
+    }
 
     const answer = await recvPc.createAnswer();
     await recvPc.setLocalDescription(answer);
+    await waitIceComplete(recvPc);
 
-    await gatherIceQuick(recvPc, 2200);
+    const payload = {
+      sdp: recvPc.localDescription,
+      candidates
+    };
 
-    const sdp = filterHostCandidatesInSdp(recvPc.localDescription?.sdp || "");
-    return makeAnswerSignal(sdp);
+    const outBlob = await encryptJSON(pass, payload);
+    answerOut.value = outBlob;
+    btnCopyAnswer.disabled = false;
+    btnResetRecv.disabled = false;
+
+    globalState.textContent = "受信：Answer作成済（送信側へ返す）";
+    recvConn.textContent = "Answer作成済";
   }
 
-  // Offer QR読取 → 読み取り完了後に “自動でAnswer作成してQR表示”
-  btnScanOfferQR.addEventListener("click", async () => {
+  btnMakeAnswer.addEventListener("click", async () => {
     try {
-      await openScan("Offer QR読取（受信側）", async (val) => {
-        try {
-          globalState.textContent = "受信：Answer作成中…";
-
-          // 先にAnswerモーダルを出す（体感“即”）
-          showQrModal("Answer（送信側でQR読取）", "準備中…");
-
-          const answerSignal = await makeAnswerFromOfferSignalString(val);
-          setQrContent(answerSignal);
-
-          globalState.textContent = "受信：Answer QR表示中";
-          recvConn.textContent = "Answer作成済";
-        } catch (e) {
-          closeQR();
-          globalState.textContent = "エラー";
-          alert(e.message || "Answer作成に失敗しました");
-        }
-      });
-    } catch {
-      alert("QR読取を開始できませんでした。");
+      globalState.textContent = "受信：Answer作成中…";
+      await makeAnswerEncrypted();
+    } catch (e) {
+      globalState.textContent = "エラー";
+      alert(e.message || "Answer作成に失敗しました");
     }
   });
 
-  btnPlayRemote.addEventListener("click", async () => { try { await remoteVideo.play(); } catch {} });
+  btnCopyAnswer.addEventListener("click", async () => {
+    await safeCopy(answerOut.value);
+  });
+
+  btnPlayRemote.addEventListener("click", async () => {
+    try { await remoteVideo.play(); } catch {}
+  });
 
   btnSpkMute.addEventListener("click", () => {
     spkOn = !spkOn;
@@ -940,23 +740,23 @@
     btnNightRemote.textContent = nightRemoteOn ? "🌙 暗視：ON" : "🌙 暗視：OFF";
   });
 
-  btnFullAlt.addEventListener("click", () => requestVideoFullscreen(remoteVideo));
-  btnFullRemote.addEventListener("click", () => requestVideoFullscreen(remoteVideo));
-  remoteVideo.addEventListener("dblclick", () => requestVideoFullscreen(remoteVideo));
-
-  btnResetRecv.addEventListener("click", resetReceiverAll);
-
-  // Cleanup
-  window.addEventListener("beforeunload", async () => {
-    stopSenderAll();
-    resetReceiverAll();
-    await closeScan();
-    closeQR();
+  btnFull.addEventListener("click", async () => {
+    try {
+      if (remoteVideo.requestFullscreen) await remoteVideo.requestFullscreen();
+      else if (remoteVideo.webkitEnterFullscreen) remoteVideo.webkitEnterFullscreen();
+    } catch {}
   });
 
-  // Init
+  btnResetRecv.addEventListener("click", () => resetReceiverAll());
+
+  // ====== Cleanup on unload ======
+  window.addEventListener("beforeunload", () => {
+    stopSenderAll();
+    resetReceiverAll();
+  });
+
+  // 初期：受信側もクリア状態に
   resetReceiverAll();
-  btnTorch.disabled = true;
 })();
 </script>
 </body>
