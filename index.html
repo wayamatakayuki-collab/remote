@@ -4,54 +4,49 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
   <title>ベビーモニター（家LAN限定 / 1ファイル / AirDrop即接続）</title>
-
   <script src="https://cdn.tailwindcss.com"></script>
-
   <style>
     body { -webkit-tap-highlight-color: transparent; }
     video { background:#000; }
+    .night { filter: brightness(1.9) contrast(1.45) saturate(0.85); }
 
-    /* 疑似暗視（表示フィルタ） */
-    .night { filter: brightness(2.0) contrast(1.55) saturate(0.85); }
-
-    /* ボタンのリップル（波紋） */
-    .ripple-wrap { position: relative; overflow: hidden; }
+    /* 押下エフェクト */
+    .pressy { transition: transform .08s ease, filter .15s ease; }
+    .pressy:active { transform: scale(.98); filter: brightness(.96); }
     .ripple {
-      position: absolute;
-      border-radius: 9999px;
-      transform: scale(0);
-      animation: ripple 520ms ease-out;
-      background: rgba(255,255,255,.55);
-      pointer-events: none;
-      mix-blend-mode: overlay;
+      position: relative; overflow: hidden;
     }
-    @keyframes ripple {
-      to { transform: scale(4); opacity: 0; }
+    .ripple::after{
+      content:""; position:absolute; inset:auto; width:12px; height:12px; border-radius:999px;
+      background: rgba(255,255,255,.55);
+      transform: translate(-50%,-50%) scale(0);
+      opacity: 0;
+      pointer-events:none;
+    }
+    .ripple.rippling::after{
+      animation: rip .55s ease-out;
+    }
+    @keyframes rip{
+      0%{ opacity:.55; transform: translate(var(--x),var(--y)) scale(0); }
+      100%{ opacity:0; transform: translate(var(--x),var(--y)) scale(24); }
     }
 
-    /* 疑似全画面（Fullscreen APIに頼らない） */
-    .fs-on { overflow: hidden; }
-    .fs {
-      position: fixed;
-      inset: 0;
-      z-index: 9999;
-      background: #000;
-      display: flex;
-      flex-direction: column;
-      padding: 10px;
-      gap: 10px;
+    /* 疑似全画面 */
+    .pseudoFS {
+      position: fixed !important;
+      inset: 0 !important;
+      z-index: 9999 !important;
+      background: #000 !important;
+      padding: 10px !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
     }
-    .fs video {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      border-radius: 18px;
-    }
-    .fsbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
+    .pseudoFS video{
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: contain !important;
+      border-radius: 16px !important;
     }
   </style>
 </head>
@@ -59,85 +54,74 @@
 <body class="bg-slate-50 text-slate-800">
   <div class="max-w-4xl mx-auto p-4 space-y-4">
 
+    <!-- Error banner -->
+    <div id="errBar" class="hidden rounded-2xl border border-rose-200 bg-rose-50 p-3">
+      <div class="font-black text-rose-800">⚠️ 初期化エラー</div>
+      <div id="errText" class="text-xs text-rose-700 mt-1 whitespace-pre-wrap"></div>
+      <div class="text-[11px] text-rose-700 mt-2">
+        ヒント：GitHub Pages反映直後はキャッシュが残ります。URL末尾に <b>?v=2</b> を付けて開き直してください。
+      </div>
+    </div>
+
     <!-- Header -->
     <header class="space-y-2">
-      <div class="flex items-start justify-between gap-2 flex-wrap">
-        <div>
-          <div class="text-xl md:text-2xl font-black leading-tight">ベビーモニター（家LAN限定 / AirDrop即接続）</div>
-          <div class="text-xs text-slate-500 mt-1 leading-relaxed">
-            ※HTTPS必須（GitHub Pages等）。<strong>同じWi-Fi</strong>で使用。ゲストWi-Fiの「端末隔離（AP isolation）」があると接続不可。<br/>
-            ※WebRTCの「待ち合わせ」をAirDropで行います（映像・音声は端末間で直接送受信）。
-          </div>
-        </div>
-        <div class="flex gap-2 items-center">
-          <div class="text-xs font-black px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-            LAN前提 / 1ファイル
-          </div>
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <div class="text-xl sm:text-2xl font-black">ベビーモニター（家LAN限定 / AirDrop即接続）</div>
+        <div class="text-xs font-bold px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+          GitHub Pages / 1ファイル
         </div>
       </div>
-
-      <!-- Mode selector -->
-      <section class="bg-white rounded-3xl border border-slate-200 p-3 shadow-sm">
-        <div class="flex items-center justify-between gap-2 flex-wrap">
-          <div class="flex items-center gap-2">
-            <div class="text-sm font-black text-slate-700">モード</div>
-            <div class="text-[11px] text-slate-500">同じページを2台で開いて、片方を送信・片方を受信に</div>
-          </div>
-          <div class="text-[11px] text-slate-500">ブラウザ：<span id="uaHint" class="font-bold"></span></div>
-        </div>
-
-        <div class="mt-2 grid grid-cols-2 gap-2">
-          <button id="btnModeSend" class="ripple-wrap px-4 py-3 rounded-2xl font-black border border-slate-200 bg-white hover:bg-slate-100 active:scale-[0.98] transition">
-            👶 送信（ベビー側）
-          </button>
-          <button id="btnModeRecv" class="ripple-wrap px-4 py-3 rounded-2xl font-black border border-slate-200 bg-white hover:bg-slate-100 active:scale-[0.98] transition">
-            👀 受信（見守り側）
-          </button>
-        </div>
-
-        <div class="mt-2 flex items-center justify-between gap-2 flex-wrap">
-          <div class="text-sm">
-            状態：<span id="globalState" class="font-black text-slate-700">待機中</span>
-          </div>
-          <div class="text-xs text-slate-500">
-            最短：送信側「ワンタップ開始」→ 受信側「ワンタップ返送」
-          </div>
-        </div>
-      </section>
+      <div class="text-xs text-slate-500 leading-relaxed">
+        ※医療機器ではありません。<br/>
+        ※HTTPS必須（GitHub Pages等）。<b>同じWi-Fi内</b>で使ってください（ゲストWi-Fiの「端末隔離(AP isolation)」があると接続不可）。<br/>
+        ※「LAN限定」意図：STUN/TURNなし＋host候補のみ採用（外部回線からの接続は基本できません）。
+      </div>
     </header>
 
+    <!-- Quick Start -->
+    <section class="bg-white rounded-3xl border border-slate-200 p-4 shadow-sm">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <div class="font-black text-slate-700">⚡ 究極の即使い（30秒）</div>
+        <div class="text-xs text-slate-500">iPhone / iPad対応</div>
+      </div>
+      <ol class="mt-3 text-sm text-slate-700 space-y-1 list-decimal pl-5">
+        <li>2台ともこのページを開く（同じWi-Fi）</li>
+        <li>片方を <b>送信</b> → 「カメラ開始」→「Offer作成」→「共有(AirDrop)」</li>
+        <li>もう片方を <b>受信</b> → 受け取ったテキストを<b>コピー</b> → 「📋貼り付け」→「Answer作成」→「共有(AirDrop)」</li>
+        <li>送信側で Answer を受け取って<b>コピー</b> → 「📋貼り付け」→「接続」</li>
+      </ol>
+      <div class="mt-3 text-[11px] text-slate-500">
+        ※受信側はiOSの自動再生制限があるため、映像が来たら <b>「▶ 再生」</b> を押すのが確実です。
+      </div>
+    </section>
+
+    <!-- Mode -->
+    <section class="bg-white rounded-3xl border border-slate-200 p-4 space-y-3 shadow-sm">
+      <div class="flex items-center justify-between gap-3 flex-wrap">
+        <div class="font-black text-slate-700">0）モード</div>
+        <div class="text-xs text-slate-500">状態：<span id="globalState" class="font-black text-slate-700">待機中</span> / ブラウザ：<span id="uaHint"></span></div>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <button id="btnModeSend" class="pressy ripple px-3 py-3 rounded-2xl font-black border border-slate-200 bg-sky-50 text-sky-700">
+          👶 送信（ベビー側）
+        </button>
+        <button id="btnModeRecv" class="pressy ripple px-3 py-3 rounded-2xl font-black border border-slate-200 bg-white hover:bg-slate-100">
+          👀 受信（見守り側）
+        </button>
+      </div>
+      <div class="text-xs text-slate-500">
+        ※パスワードなし（家庭内用途の即起動を優先）。家族以外が同じWi-Fiに入れる状況は避けてください。
+      </div>
+    </section>
+
     <!-- SEND VIEW -->
-    <section id="sendView" class="space-y-4 hidden">
-
-      <section class="bg-white rounded-3xl border border-slate-200 p-4 shadow-sm space-y-4">
+    <section id="sendView" class="space-y-4">
+      <section class="bg-white rounded-3xl border border-slate-200 p-4 space-y-4 shadow-sm">
         <div class="flex items-center justify-between gap-2 flex-wrap">
-          <div>
-            <div class="font-black text-slate-700">送信（ベビー側）</div>
-            <div class="text-xs text-slate-500 mt-0.5">究極の即使い：<strong>ワンタップ開始</strong>（カメラ→Offer→AirDrop）</div>
-          </div>
-          <div class="flex gap-2">
-            <button id="btnStopAllSend" class="ripple-wrap px-3 py-2 rounded-2xl font-bold bg-slate-200 text-slate-800 active:scale-[0.98] transition" disabled>
-              停止
-            </button>
-          </div>
-        </div>
-
-        <!-- Ultimate quick start -->
-        <div class="bg-sky-50 border border-sky-200 rounded-3xl p-3">
-          <div class="flex items-center justify-between gap-2 flex-wrap">
-            <div class="font-black text-sky-900">🚀 ワンタップ開始（おすすめ）</div>
-            <div class="text-[11px] text-sky-700 font-bold">迷ったらここだけ</div>
-          </div>
-          <div class="mt-2 grid sm:grid-cols-2 gap-2">
-            <button id="btnQuickStartSend"
-              class="ripple-wrap px-4 py-4 rounded-3xl font-black bg-sky-600 text-white shadow-sm active:scale-[0.98] transition">
-              ワンタップ開始<br/><span class="text-xs font-bold opacity-90">カメラ→Offer→AirDrop</span>
-            </button>
-            <button id="btnShareOffer"
-              class="ripple-wrap px-4 py-4 rounded-3xl font-black bg-white border border-sky-200 text-sky-900 active:scale-[0.98] transition" disabled>
-              📤 Offerを共有（AirDrop）
-              <div class="text-xs font-bold text-sky-700 mt-1">Offer作成済みならこれ</div>
-            </button>
+          <div class="font-black text-slate-700">送信（ベビー側）</div>
+          <div class="flex items-center gap-2">
+            <button id="btnStartCam" class="pressy ripple px-4 py-2 rounded-2xl bg-sky-600 text-white font-black">カメラ開始</button>
+            <button id="btnStopAllSend" class="pressy ripple px-4 py-2 rounded-2xl bg-slate-200 font-black" disabled>停止</button>
           </div>
         </div>
 
@@ -146,109 +130,59 @@
           <div class="space-y-2">
             <div class="flex items-center justify-between">
               <div class="text-sm font-bold text-slate-600">プレビュー</div>
-              <button id="btnFsLocal"
-                class="ripple-wrap px-3 py-2 rounded-2xl font-bold bg-white border border-slate-200 active:scale-[0.98] transition" disabled>
-                ⛶ 全画面
-              </button>
+              <button id="btnFullLocal" class="pressy ripple px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold" disabled>⛶ 画面いっぱい</button>
             </div>
-
-            <div id="localWrap" class="relative">
-              <video id="localVideo" class="w-full rounded-3xl aspect-video" playsinline muted autoplay></video>
+            <div id="localWrap" class="rounded-3xl overflow-hidden border border-slate-200">
+              <video id="localVideo" class="w-full aspect-video" playsinline muted autoplay></video>
             </div>
 
             <div class="grid grid-cols-2 gap-2">
-              <button id="btnStartCam"
-                class="ripple-wrap px-4 py-3 rounded-2xl font-black bg-sky-600 text-white active:scale-[0.98] transition">
-                カメラ開始
-              </button>
-              <button id="btnFlipCam"
-                class="ripple-wrap px-3 py-2 rounded-2xl font-bold bg-white border border-slate-200 active:scale-[0.98] transition" disabled>
-                📷 前/後
-              </button>
-
-              <button id="btnMicMute"
-                class="ripple-wrap px-3 py-2 rounded-2xl font-bold bg-white border border-slate-200 active:scale-[0.98] transition" disabled>
-                🎤 マイク：ON
-              </button>
-              <button id="btnNightLocal"
-                class="ripple-wrap px-3 py-2 rounded-2xl font-bold bg-white border border-slate-200 active:scale-[0.98] transition" disabled>
-                🌙 暗視：OFF
-              </button>
-
-              <button id="btnTorch"
-                class="ripple-wrap px-3 py-2 rounded-2xl font-bold bg-white border border-slate-200 col-span-2 active:scale-[0.98] transition" disabled>
-                🔦 ライト：OFF
-              </button>
+              <button id="btnFlipCam" class="pressy ripple px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold" disabled>📷 前/後切替</button>
+              <button id="btnMicMute" class="pressy ripple px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold" disabled>🎤 マイク：ON</button>
+              <button id="btnNightLocal" class="pressy ripple px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold" disabled>🌙 暗視：OFF</button>
+              <button id="btnTorch" class="pressy ripple px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold" disabled>🔦 ライト：OFF</button>
             </div>
 
             <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs text-slate-600">
               <div class="font-bold text-slate-700 mb-1">実際の撮影設定</div>
               <div id="camInfo">未開始</div>
-              <div class="mt-1 text-slate-500">※端末が対応する範囲で最大に寄せます（理想：4K/30fps）。</div>
+              <div class="mt-1 text-slate-500">※理想値：4K/30fps を要求し、端末が出せる最大へ寄せます。</div>
             </div>
 
             <div class="text-[11px] text-slate-500">
-              ※暗視は疑似（表示フィルタ）です。赤外線暗視はWebアプリでは追加できません。
+              ※暗視は疑似（明るさ/コントラスト補正）。赤外線暗視は端末ハード依存でWebアプリから追加できません。
             </div>
           </div>
 
-          <!-- Connection -->
+          <!-- Flow -->
           <div class="space-y-3">
-            <div class="bg-indigo-50 border border-indigo-200 rounded-2xl p-3">
-              <div class="font-black text-indigo-900">Offer（送信側→受信側）</div>
-              <div class="text-xs text-indigo-700 mt-1">基本は「共有（AirDrop）」だけ。保険でコピー/コードも残しています。</div>
-
+            <div class="bg-indigo-50 border border-indigo-200 rounded-2xl p-3 text-sm">
+              <div class="font-black text-indigo-900">1）Offer作成 → 共有(AirDrop)</div>
+              <div class="text-indigo-700 text-xs mt-1">受信側へ送る（共有できない時はコピー）</div>
               <div class="mt-2 flex gap-2 flex-wrap">
-                <button id="btnMakeOffer"
-                  class="ripple-wrap px-4 py-3 rounded-2xl font-black bg-indigo-600 text-white active:scale-[0.98] transition" disabled>
-                  Offer作成
-                </button>
-                <button id="btnCopyOffer"
-                  class="ripple-wrap px-3 py-2 rounded-2xl font-bold bg-slate-200 text-slate-800 active:scale-[0.98] transition" disabled>
-                  コピー
-                </button>
+                <button id="btnMakeOffer" class="pressy ripple px-4 py-2 rounded-2xl bg-indigo-600 text-white font-black" disabled>Offer作成</button>
+                <button id="btnShareOffer" class="pressy ripple px-4 py-2 rounded-2xl border border-indigo-200 bg-white font-black" disabled>共有(AirDrop)</button>
+                <button id="btnCopyOffer" class="pressy ripple px-4 py-2 rounded-2xl bg-slate-200 font-black" disabled>コピー</button>
               </div>
-
-              <div class="mt-2 space-y-2">
-                <div class="text-[11px] text-slate-600">Offerリンク（AirDropで送る）</div>
-                <input id="offerLinkOut" class="w-full rounded-2xl border border-indigo-200 px-3 py-2 text-xs bg-white" readonly />
-                <details class="bg-white/50 rounded-2xl border border-indigo-200 p-3">
-                  <summary class="cursor-pointer text-xs font-bold text-indigo-900">保険：Offerコード（手動貼付用）</summary>
-                  <textarea id="offerOut" class="mt-2 w-full h-24 rounded-2xl border border-indigo-200 p-3 text-xs font-mono bg-white" readonly
-                    placeholder="Offerコード"></textarea>
-                </details>
-              </div>
+              <textarea id="offerOut" class="mt-2 w-full h-28 rounded-2xl border border-indigo-200 p-3 text-xs font-mono"
+                        placeholder="Offerがここに出ます" readonly></textarea>
             </div>
 
-            <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3">
-              <div class="font-black text-emerald-900">Answer（受信側→送信側）</div>
-              <div class="text-xs text-emerald-700 mt-1">
-                受信側から返ってきた<strong>Answerリンク</strong>を、この送信タブで開くと自動接続します。<br/>
-                うまくいかない時だけ「クリップボードから」または手動貼付。
-              </div>
-
+            <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 text-sm">
+              <div class="font-black text-emerald-900">2）Answer受け取り → 接続</div>
+              <div class="text-emerald-700 text-xs mt-1">受信側から返ってきたAnswerを貼り付け</div>
               <div class="mt-2 flex gap-2 flex-wrap">
-                <button id="btnPasteAnswerFromClipboard"
-                  class="ripple-wrap px-3 py-2 rounded-2xl font-bold bg-white border border-emerald-200 text-emerald-900 active:scale-[0.98] transition" disabled>
-                  📋 クリップボードから
-                </button>
-                <button id="btnConnectSend"
-                  class="ripple-wrap px-4 py-3 rounded-2xl font-black bg-emerald-600 text-white active:scale-[0.98] transition" disabled>
-                  手動で接続
-                </button>
+                <button id="btnPasteAnswer" class="pressy ripple px-4 py-2 rounded-2xl border border-emerald-200 bg-white font-black" disabled>📋貼り付け</button>
+                <button id="btnConnectSend" class="pressy ripple px-4 py-2 rounded-2xl bg-emerald-600 text-white font-black" disabled>接続</button>
               </div>
-
-              <details class="mt-2 bg-white/50 rounded-2xl border border-emerald-200 p-3">
-                <summary class="cursor-pointer text-xs font-bold text-emerald-900">保険：Answerコードを貼り付ける</summary>
-                <textarea id="answerIn" class="mt-2 w-full h-24 rounded-2xl border border-emerald-200 p-3 text-xs font-mono bg-white"
-                  placeholder="Answerコード（JSON）または Answerリンク（#a=...）"></textarea>
-              </details>
+              <textarea id="answerIn" class="mt-2 w-full h-28 rounded-2xl border border-emerald-200 p-3 text-xs font-mono"
+                        placeholder="Answerを貼り付け（または📋貼り付け）"></textarea>
             </div>
 
-            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3">
+            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-sm">
               <div class="font-black text-slate-700">接続状態</div>
               <div class="mt-1 text-sm">Peer：<span id="sendConn" class="font-black">未接続</span></div>
-              <div class="text-[11px] text-slate-500 mt-1">※STUN/TURNなし（家LAN想定）。外部回線からの利用は想定しません。</div>
+              <div class="text-xs text-slate-500 mt-1">※LAN限定（host候補のみ）。</div>
             </div>
           </div>
         </div>
@@ -257,93 +191,45 @@
 
     <!-- RECV VIEW -->
     <section id="recvView" class="space-y-4 hidden">
-
-      <section class="bg-white rounded-3xl border border-slate-200 p-4 shadow-sm space-y-4">
+      <section class="bg-white rounded-3xl border border-slate-200 p-4 space-y-4 shadow-sm">
         <div class="flex items-center justify-between gap-2 flex-wrap">
-          <div>
-            <div class="font-black text-slate-700">受信（見守り側）</div>
-            <div class="text-xs text-slate-500 mt-0.5">究極の即使い：Offerリンクを開く → <strong>ワンタップ返送</strong>（Answer→AirDrop）</div>
-          </div>
-          <div class="flex gap-2">
-            <button id="btnResetRecv"
-              class="ripple-wrap px-3 py-2 rounded-2xl font-bold bg-slate-200 text-slate-800 active:scale-[0.98] transition" disabled>
-              切断/リセット
-            </button>
-          </div>
-        </div>
-
-        <!-- Ultimate quick return -->
-        <div class="bg-emerald-50 border border-emerald-200 rounded-3xl p-3">
-          <div class="flex items-center justify-between gap-2 flex-wrap">
-            <div class="font-black text-emerald-900">🚀 ワンタップ返送（おすすめ）</div>
-            <div class="text-[11px] text-emerald-700 font-bold">Offerを受け取ったらここ</div>
-          </div>
-          <div class="mt-2 grid sm:grid-cols-2 gap-2">
-            <button id="btnQuickReturnRecv"
-              class="ripple-wrap px-4 py-4 rounded-3xl font-black bg-emerald-600 text-white shadow-sm active:scale-[0.98] transition">
-              ワンタップ返送<br/><span class="text-xs font-bold opacity-90">Answer→AirDrop</span>
-            </button>
-            <button id="btnShareAnswer"
-              class="ripple-wrap px-4 py-4 rounded-3xl font-black bg-white border border-emerald-200 text-emerald-900 active:scale-[0.98] transition" disabled>
-              📤 Answerを共有（AirDrop）
-              <div class="text-xs font-bold text-emerald-700 mt-1">Answer作成済みならこれ</div>
-            </button>
+          <div class="font-black text-slate-700">受信（見守り側）</div>
+          <div class="flex items-center gap-2">
+            <button id="btnResetRecv" class="pressy ripple px-4 py-2 rounded-2xl bg-slate-200 font-black" disabled>切断/リセット</button>
           </div>
         </div>
 
         <div class="grid md:grid-cols-2 gap-4">
-          <!-- Flow -->
-          <div class="space-y-3">
-            <div class="bg-indigo-50 border border-indigo-200 rounded-2xl p-3">
-              <div class="font-black text-indigo-900">Offer（送信側→受信側）</div>
-              <div class="text-xs text-indigo-700 mt-1">
-                基本はAirDropで来た<strong>Offerリンクを開く</strong>だけ。うまくいかない時だけ貼り付け。
-              </div>
-
+          <!-- Offer/Answer -->
+          <div class="space-y-2">
+            <div class="bg-indigo-50 border border-indigo-200 rounded-2xl p-3 text-sm">
+              <div class="font-black text-indigo-900">1）Offer受け取り（AirDrop → コピー → 貼り付け）</div>
               <div class="mt-2 flex gap-2 flex-wrap">
-                <button id="btnPasteOfferFromClipboard"
-                  class="ripple-wrap px-3 py-2 rounded-2xl font-bold bg-white border border-indigo-200 text-indigo-900 active:scale-[0.98] transition">
-                  📋 クリップボードから
-                </button>
-                <button id="btnMakeAnswer"
-                  class="ripple-wrap px-4 py-3 rounded-2xl font-black bg-indigo-600 text-white active:scale-[0.98] transition">
-                  Answer作成
-                </button>
+                <button id="btnPasteOffer" class="pressy ripple px-4 py-2 rounded-2xl border border-indigo-200 bg-white font-black">📋貼り付け</button>
+                <button id="btnMakeAnswer" class="pressy ripple px-4 py-2 rounded-2xl bg-indigo-600 text-white font-black">Answer作成</button>
               </div>
-
-              <details class="mt-2 bg-white/50 rounded-2xl border border-indigo-200 p-3">
-                <summary class="cursor-pointer text-xs font-bold text-indigo-900">保険：Offerコードを貼り付ける</summary>
-                <textarea id="offerIn" class="mt-2 w-full h-24 rounded-2xl border border-indigo-200 p-3 text-xs font-mono bg-white"
-                  placeholder="Offerコード（JSON）または Offerリンク（#o=...）"></textarea>
-              </details>
-            </div>
-
-            <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3">
-              <div class="font-black text-emerald-900">Answer（受信側→送信側）</div>
-              <div class="text-xs text-emerald-700 mt-1">作成したら<strong>共有（AirDrop）</strong>で送信側へ返します。</div>
-
-              <div class="mt-2 flex gap-2 flex-wrap">
-                <button id="btnCopyAnswer"
-                  class="ripple-wrap px-3 py-2 rounded-2xl font-bold bg-slate-200 text-slate-800 active:scale-[0.98] transition" disabled>
-                  コピー
-                </button>
-              </div>
-
-              <div class="mt-2 space-y-2">
-                <div class="text-[11px] text-slate-600">Answerリンク（AirDropで返す）</div>
-                <input id="answerLinkOut" class="w-full rounded-2xl border border-emerald-200 px-3 py-2 text-xs bg-white" readonly />
-                <details class="bg-white/50 rounded-2xl border border-emerald-200 p-3">
-                  <summary class="cursor-pointer text-xs font-bold text-emerald-900">保険：Answerコード（手動貼付用）</summary>
-                  <textarea id="answerOut" class="mt-2 w-full h-24 rounded-2xl border border-emerald-200 p-3 text-xs font-mono bg-white" readonly
-                    placeholder="Answerコード"></textarea>
-                </details>
+              <textarea id="offerIn" class="mt-2 w-full h-28 rounded-2xl border border-indigo-200 p-3 text-xs font-mono"
+                        placeholder="Offerを貼り付け（または📋貼り付け）"></textarea>
+              <div class="text-[11px] text-indigo-700 mt-2">
+                ※「貼り付け」が無理な時：Offer欄を長押し→ペースト
               </div>
             </div>
 
-            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3">
+            <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 text-sm">
+              <div class="font-black text-emerald-900">2）Answerを返す（共有/AirDrop）</div>
+              <div class="text-emerald-700 text-xs mt-1">作成後に送信側へ返す</div>
+              <div class="mt-2 flex gap-2 flex-wrap">
+                <button id="btnShareAnswer" class="pressy ripple px-4 py-2 rounded-2xl border border-emerald-200 bg-white font-black" disabled>共有(AirDrop)</button>
+                <button id="btnCopyAnswer" class="pressy ripple px-4 py-2 rounded-2xl bg-slate-200 font-black" disabled>コピー</button>
+              </div>
+              <textarea id="answerOut" class="mt-2 w-full h-28 rounded-2xl border border-emerald-200 p-3 text-xs font-mono"
+                        placeholder="Answerがここに出ます" readonly></textarea>
+            </div>
+
+            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-sm">
               <div class="font-black text-slate-700">接続状態</div>
               <div class="mt-1 text-sm">Peer：<span id="recvConn" class="font-black">未接続</span></div>
-              <div class="text-[11px] text-slate-500 mt-1">iOSは自動再生制限があります。映像が出ない/音が出ない時は右の「▶再生」を押してください。</div>
+              <div class="text-xs text-slate-500 mt-1">iOSは自動再生制限があるため、映像が来たら「▶ 再生」を押すと安定します。</div>
             </div>
           </div>
 
@@ -351,53 +237,25 @@
           <div class="space-y-2">
             <div class="flex items-center justify-between">
               <div class="text-sm font-bold text-slate-600">受信映像</div>
-              <button id="btnFsRemote"
-                class="ripple-wrap px-3 py-2 rounded-2xl font-bold bg-white border border-slate-200 active:scale-[0.98] transition" disabled>
-                ⛶ 全画面
-              </button>
+              <button id="btnFullRemote" class="pressy ripple px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold" disabled>⛶ 画面いっぱい</button>
             </div>
 
-            <div id="remoteWrap" class="relative">
-              <video id="remoteVideo" class="w-full rounded-3xl aspect-video" playsinline autoplay muted></video>
-
-              <!-- 再生できない対策：巨大ボタン（iOS用） -->
-              <div id="playOverlay" class="absolute inset-0 hidden">
-                <div class="absolute inset-0 bg-black/35 rounded-3xl"></div>
-                <div class="absolute inset-0 flex items-center justify-center">
-                  <button id="btnPlayOverlay"
-                    class="ripple-wrap px-6 py-5 rounded-3xl font-black bg-emerald-600 text-white shadow-lg active:scale-[0.98] transition">
-                    ▶ 再生
-                    <div class="text-xs font-bold opacity-90 mt-1">iPhone/iPadは押す必要がある場合があります</div>
-                  </button>
-                </div>
-              </div>
+            <div id="remoteWrap" class="rounded-3xl overflow-hidden border border-slate-200">
+              <video id="remoteVideo" class="w-full aspect-video" playsinline autoplay></video>
             </div>
 
             <div class="grid grid-cols-2 gap-2">
-              <button id="btnPlayRemote"
-                class="ripple-wrap px-4 py-3 rounded-2xl font-black bg-emerald-600 text-white active:scale-[0.98] transition" disabled>
-                ▶ 再生
-              </button>
-              <button id="btnSpkMute"
-                class="ripple-wrap px-3 py-2 rounded-2xl font-bold bg-white border border-slate-200 active:scale-[0.98] transition" disabled>
-                🔈 音：ON
-              </button>
-              <button id="btnNightRemote"
-                class="ripple-wrap px-3 py-2 rounded-2xl font-bold bg-white border border-slate-200 active:scale-[0.98] transition" disabled>
-                🌙 暗視：OFF
-              </button>
-              <button id="btnFullAlt"
-                class="ripple-wrap px-3 py-2 rounded-2xl font-bold bg-white border border-slate-200 active:scale-[0.98] transition" disabled>
-                ⛶（代替）
-              </button>
+              <button id="btnPlayRemote" class="pressy ripple px-3 py-2 rounded-2xl bg-emerald-600 text-white font-black" disabled>▶ 再生</button>
+              <button id="btnSpkMute" class="pressy ripple px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold" disabled>🔈 音：ON</button>
+              <button id="btnNightRemote" class="pressy ripple px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold" disabled>🌙 暗視：OFF</button>
+              <button id="btnForceIOSFS" class="pressy ripple px-3 py-2 rounded-2xl border border-slate-200 bg-white font-bold" disabled>⛶ iOS全画面</button>
             </div>
 
             <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs text-slate-600">
-              <div class="font-bold text-slate-700 mb-1">家の中で“即使い”のコツ</div>
+              <div class="font-bold text-slate-700 mb-1">メモ</div>
               <ul class="list-disc pl-5 space-y-1">
-                <li>送信側は「カメラ開始→Offer作成」したタブを閉じない（そこにAnswerリンクを開く）</li>
-                <li>音が出ないときは一度「▶再生」を押す（iOS制限対策）</li>
-                <li>全画面は疑似全画面なので確実に動きます（終了ボタンあり）</li>
+                <li>同じWi-Fiでも「端末隔離(AP isolation)」があると接続できません。</li>
+                <li>外部からの接続は想定しません（STUN/TURNなし）。</li>
               </ul>
             </div>
           </div>
@@ -406,28 +264,42 @@
     </section>
 
     <div class="text-[11px] text-slate-500 px-1">
-      ※医療機器ではありません。短時間の補助用途を想定しています。
+      ✅ 共有(AirDrop)は「iOSの共有シート」を使います。出ない場合は「コピー→貼り付け」でOKです。
     </div>
-  </div>
-
-  <!-- 疑似全画面オーバーレイ（共通） -->
-  <div id="fsLayer" class="hidden fs">
-    <div class="fsbar">
-      <div class="text-white text-sm font-black truncate" id="fsTitle">全画面</div>
-      <div class="flex gap-2">
-        <button id="fsNightBtn" class="ripple-wrap px-3 py-2 rounded-2xl font-bold bg-white/10 text-white border border-white/20 active:scale-[0.98] transition">🌙</button>
-        <button id="fsMuteBtn" class="ripple-wrap px-3 py-2 rounded-2xl font-bold bg-white/10 text-white border border-white/20 active:scale-[0.98] transition">🔈</button>
-        <button id="fsClose" class="ripple-wrap px-4 py-2 rounded-2xl font-black bg-white text-slate-900 active:scale-[0.98] transition">終了</button>
-      </div>
-    </div>
-    <video id="fsVideo" playsinline autoplay muted></video>
   </div>
 
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
 
-  // ===== UI refs =====
+  // ===== Error visible =====
+  const errBar = $("errBar");
+  const errText = $("errText");
+  function showErr(e){
+    errText.textContent = (e && (e.stack || e.message)) ? (e.stack || e.message) : String(e || "unknown");
+    errBar.classList.remove("hidden");
+  }
+  window.addEventListener("error", (ev) => showErr(ev.error || ev.message));
+  window.addEventListener("unhandledrejection", (ev) => showErr(ev.reason));
+
+  // ===== Ripple effect for buttons =====
+  function bindRipple(el){
+    if(!el) return;
+    el.addEventListener("click", (e)=>{
+      const r = el.getBoundingClientRect();
+      const x = (e.clientX - r.left) + "px";
+      const y = (e.clientY - r.top) + "px";
+      el.style.setProperty("--x", x);
+      el.style.setProperty("--y", y);
+      el.classList.remove("rippling");
+      void el.offsetWidth;
+      el.classList.add("rippling");
+      setTimeout(()=>el.classList.remove("rippling"), 600);
+    }, {passive:true});
+  }
+  document.querySelectorAll("button.ripple").forEach(bindRipple);
+
+  // UI
   const uaHint = $("uaHint");
   const globalState = $("globalState");
   const btnModeSend = $("btnModeSend");
@@ -435,253 +307,167 @@
   const sendView = $("sendView");
   const recvView = $("recvView");
 
-  // Sender refs
-  const btnQuickStartSend = $("btnQuickStartSend");
+  // Send UI
   const btnStartCam = $("btnStartCam");
   const btnStopAllSend = $("btnStopAllSend");
   const btnFlipCam = $("btnFlipCam");
   const btnMicMute = $("btnMicMute");
   const btnNightLocal = $("btnNightLocal");
   const btnTorch = $("btnTorch");
-  const btnFsLocal = $("btnFsLocal");
-  const localVideo = $("localVideo");
+  const btnFullLocal = $("btnFullLocal");
   const localWrap = $("localWrap");
+  const localVideo = $("localVideo");
   const camInfo = $("camInfo");
   const btnMakeOffer = $("btnMakeOffer");
   const btnShareOffer = $("btnShareOffer");
   const btnCopyOffer = $("btnCopyOffer");
-  const offerLinkOut = $("offerLinkOut");
   const offerOut = $("offerOut");
-  const btnPasteAnswerFromClipboard = $("btnPasteAnswerFromClipboard");
-  const btnConnectSend = $("btnConnectSend");
   const answerIn = $("answerIn");
+  const btnPasteAnswer = $("btnPasteAnswer");
+  const btnConnectSend = $("btnConnectSend");
   const sendConn = $("sendConn");
 
-  // Receiver refs
-  const btnQuickReturnRecv = $("btnQuickReturnRecv");
+  // Recv UI
   const btnResetRecv = $("btnResetRecv");
-  const btnPasteOfferFromClipboard = $("btnPasteOfferFromClipboard");
-  const btnMakeAnswer = $("btnMakeAnswer");
   const offerIn = $("offerIn");
+  const btnPasteOffer = $("btnPasteOffer");
+  const btnMakeAnswer = $("btnMakeAnswer");
+  const answerOut = $("answerOut");
   const btnShareAnswer = $("btnShareAnswer");
   const btnCopyAnswer = $("btnCopyAnswer");
-  const answerLinkOut = $("answerLinkOut");
-  const answerOut = $("answerOut");
   const recvConn = $("recvConn");
-  const remoteVideo = $("remoteVideo");
   const remoteWrap = $("remoteWrap");
+  const remoteVideo = $("remoteVideo");
   const btnPlayRemote = $("btnPlayRemote");
   const btnSpkMute = $("btnSpkMute");
   const btnNightRemote = $("btnNightRemote");
-  const btnFsRemote = $("btnFsRemote");
-  const btnFullAlt = $("btnFullAlt");
-  const playOverlay = $("playOverlay");
-  const btnPlayOverlay = $("btnPlayOverlay");
+  const btnFullRemote = $("btnFullRemote");
+  const btnForceIOSFS = $("btnForceIOSFS");
 
-  // Pseudo fullscreen layer
-  const fsLayer = $("fsLayer");
-  const fsVideo = $("fsVideo");
-  const fsClose = $("fsClose");
-  const fsTitle = $("fsTitle");
-  const fsNightBtn = $("fsNightBtn");
-  const fsMuteBtn = $("fsMuteBtn");
+  // UA hint
+  const isiOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  uaHint.textContent = isiOS ? "iOS（再生ボタン推奨）" : "OK";
 
-  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-  uaHint.textContent = isIOS ? "iOS（再生ボタンが必要な場合あり）" : "OK";
-
-  // ===== Tap effects (ripple + haptics) =====
-  function haptic() {
-    try {
-      if (navigator.vibrate) navigator.vibrate(10);
-    } catch {}
-  }
-  function addRipple(e, el) {
-    if (!el.classList.contains("ripple-wrap")) return;
-    const rect = el.getBoundingClientRect();
-    const x = (e.touches?.[0]?.clientX ?? e.clientX) - rect.left;
-    const y = (e.touches?.[0]?.clientY ?? e.clientY) - rect.top;
-    const d = Math.max(rect.width, rect.height);
-    const r = document.createElement("span");
-    r.className = "ripple";
-    r.style.width = r.style.height = d + "px";
-    r.style.left = (x - d/2) + "px";
-    r.style.top  = (y - d/2) + "px";
-    el.appendChild(r);
-    setTimeout(() => r.remove(), 700);
-  }
-  document.addEventListener("pointerdown", (e) => {
-    const el = e.target.closest("button, a");
-    if (!el) return;
-    addRipple(e, el);
-    haptic();
-  }, { passive: true });
-
-  // ===== WebRTC: LAN-only (no STUN/TURN) =====
+  // ===== WebRTC: LAN-only-ish =====
   const pcConfig = { iceServers: [] };
+  function isHostCandidate(candStr){ return / typ host /i.test(candStr || ""); }
 
-  // ===== Base64url helpers =====
-  const te = new TextEncoder();
-  const td = new TextDecoder();
-  function b64uEncode(u8) {
-    let s = btoa(String.fromCharCode(...u8));
-    return s.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-  }
-  function b64uDecode(s) {
-    s = (s || "").replace(/-/g, "+").replace(/_/g, "/");
-    while (s.length % 4) s += "=";
-    const bin = atob(s);
-    const u8 = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-    return u8;
-  }
-
-  function filterHostCandidatesInSdp(sdp) {
-    const lines = (sdp || "").split(/\r?\n/);
-    const keep = [];
-    for (const ln of lines) {
-      if (ln.startsWith("a=candidate:")) {
-        if (/ typ host /i.test(ln)) keep.push(ln);
-        continue;
+  function waitIceComplete(pc, timeoutMs=4000){
+    return new Promise(resolve=>{
+      if(pc.iceGatheringState === "complete") return resolve();
+      const t = setTimeout(()=>{ pc.removeEventListener("icegatheringstatechange", on); resolve(); }, timeoutMs);
+      function on(){
+        if(pc.iceGatheringState === "complete"){
+          clearTimeout(t);
+          pc.removeEventListener("icegatheringstatechange", on);
+          resolve();
+        }
       }
-      keep.push(ln);
+      pc.addEventListener("icegatheringstatechange", on);
+    });
+  }
+
+  // ===== Clipboard helpers =====
+  async function safeCopy(text){
+    if(!text) return;
+    try{
+      await navigator.clipboard.writeText(text);
+      toast("コピーしました");
+    }catch{
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+      toast("コピーしました");
     }
-    return keep.join("\r\n");
   }
 
-  function packDesc(desc) {
-    const mini = { type: desc.type, sdp: filterHostCandidatesInSdp(desc.sdp || "") };
-    return b64uEncode(te.encode(JSON.stringify(mini)));
-  }
-  function unpackDesc(b64) {
-    const obj = JSON.parse(td.decode(b64uDecode(b64)));
-    if (!obj || !obj.type || !obj.sdp) throw new Error("リンクが壊れています");
-    return obj;
-  }
-
-  function buildLink(kind, packed) {
-    const base = location.origin + location.pathname;
-    if (kind === "offer") return base + "#o=" + packed;
-    if (kind === "answer") return base + "#a=" + packed;
-    return base;
-  }
-  function parseFragment() {
-    const h = (location.hash || "").replace(/^#/, "");
-    if (!h) return null;
-    const mO = h.match(/^o=(.+)$/);
-    const mA = h.match(/^a=(.+)$/);
-    if (mO) return { kind: "offer", data: mO[1] };
-    if (mA) return { kind: "answer", data: mA[1] };
-    return null;
+  async function safePaste(){
+    try{
+      if(navigator.clipboard && navigator.clipboard.readText){
+        return await navigator.clipboard.readText();
+      }
+    }catch{}
+    // fallback
+    return prompt("貼り付けできない場合は、ここに長押しペーストした内容を貼ってください：") || "";
   }
 
-  // ===== Clipboard / Share =====
-  async function safeCopy(text) {
-    if (!text) return false;
-    try { await navigator.clipboard.writeText(text); return true; }
-    catch {
-      try {
-        const ta = document.createElement("textarea");
-        ta.value = text;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand("copy");
-        ta.remove();
+  // ===== Share (AirDrop) =====
+  async function shareText(title, text){
+    if(!text) return;
+    if(navigator.share){
+      try{
+        await navigator.share({ title, text });
         return true;
-      } catch { return false; }
+      }catch{
+        // user canceled or failed → fallback copy
+      }
     }
-  }
-  async function readClipboard() {
-    try { return await navigator.clipboard.readText(); } catch { return ""; }
-  }
-  async function shareLink(title, url) {
-    try {
-      if (navigator.share) { await navigator.share({ title, url }); return true; }
-    } catch {}
-    const ok = await safeCopy(url);
-    alert(ok ? "共有が使えないためリンクをコピーしました。AirDrop相手に貼り付けて送ってください。" : "共有/コピーに失敗しました。");
-    return ok;
+    await safeCopy(text);
+    alert("共有が使えないため、コピーしました。受信側で貼り付けてください。");
+    return false;
   }
 
-  // ===== Mode + remember =====
-  const LS_MODE = "bm_mode_v1";
-  let mode = localStorage.getItem(LS_MODE) || "send";
+  // ===== Toast =====
+  let toastTimer = null;
+  const toastEl = document.createElement("div");
+  toastEl.className = "fixed left-1/2 -translate-x-1/2 bottom-5 z-[99999] hidden px-4 py-2 rounded-full bg-black/80 text-white text-sm font-bold";
+  document.body.appendChild(toastEl);
+  function toast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.remove("hidden");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(()=>toastEl.classList.add("hidden"), 1200);
+  }
 
-  function setMode(next) {
-    mode = next;
-    localStorage.setItem(LS_MODE, mode);
-
-    if (mode === "send") {
+  // ===== Mode =====
+  function setMode(mode){
+    if(mode === "send"){
       sendView.classList.remove("hidden");
       recvView.classList.add("hidden");
-      btnModeSend.className = "ripple-wrap px-4 py-3 rounded-2xl font-black border border-slate-200 bg-sky-50 text-sky-700 active:scale-[0.98] transition";
-      btnModeRecv.className = "ripple-wrap px-4 py-3 rounded-2xl font-black border border-slate-200 bg-white hover:bg-slate-100 active:scale-[0.98] transition";
+      btnModeSend.className = "pressy ripple px-3 py-3 rounded-2xl font-black border border-slate-200 bg-sky-50 text-sky-700";
+      btnModeRecv.className = "pressy ripple px-3 py-3 rounded-2xl font-black border border-slate-200 bg-white hover:bg-slate-100";
       globalState.textContent = "送信モード";
-    } else {
+    }else{
       recvView.classList.remove("hidden");
       sendView.classList.add("hidden");
-      btnModeRecv.className = "ripple-wrap px-4 py-3 rounded-2xl font-black border border-slate-200 bg-emerald-50 text-emerald-700 active:scale-[0.98] transition";
-      btnModeSend.className = "ripple-wrap px-4 py-3 rounded-2xl font-black border border-slate-200 bg-white hover:bg-slate-100 active:scale-[0.98] transition";
+      btnModeRecv.className = "pressy ripple px-3 py-3 rounded-2xl font-black border border-slate-200 bg-emerald-50 text-emerald-700";
+      btnModeSend.className = "pressy ripple px-3 py-3 rounded-2xl font-black border border-slate-200 bg-white hover:bg-slate-100";
       globalState.textContent = "受信モード";
     }
+    // ripple 再バインド（className差し替えで消えるため）
+    bindRipple(btnModeSend);
+    bindRipple(btnModeRecv);
   }
-  btnModeSend.addEventListener("click", () => setMode("send"));
-  btnModeRecv.addEventListener("click", () => setMode("recv"));
+  btnModeSend.addEventListener("click", ()=>setMode("send"));
+  btnModeRecv.addEventListener("click", ()=>setMode("recv"));
+  setMode("send");
 
-  // ===== Pseudo fullscreen (always works) =====
-  let fsSource = null; // { videoEl, title, canNight, nightFlagRef, canMute, muteFlagRef }
-  function openPseudoFullscreen(videoEl, title, options = {}) {
-    if (!videoEl) return;
-
-    fsSource = { videoEl, title, ...options };
-    fsTitle.textContent = title || "全画面";
-
-    // mirror current
-    fsVideo.srcObject = videoEl.srcObject || null;
-    fsVideo.muted = !!options.forceMuted;
-    fsVideo.classList.toggle("night", !!options.isNight?.());
-
-    // show controls depending
-    fsNightBtn.disabled = !options.toggleNight;
-    fsMuteBtn.disabled = !options.toggleMute;
-
-    document.body.classList.add("fs-on");
-    fsLayer.classList.remove("hidden");
-
-    // play (user gesture already)
-    fsVideo.play().catch(() => {});
+  // ===== Pseudo fullscreen =====
+  function togglePseudoFS(wrapper, video){
+    const on = wrapper.classList.contains("pseudoFS");
+    if(on){
+      wrapper.classList.remove("pseudoFS");
+      toast("戻しました");
+    }else{
+      wrapper.classList.add("pseudoFS");
+      toast("画面いっぱい表示");
+    }
+    // iOS autoplay制限対策で play 試行
+    try{ video.play(); }catch{}
   }
 
-  function closePseudoFullscreen() {
-    fsLayer.classList.add("hidden");
-    document.body.classList.remove("fs-on");
-    try { fsVideo.pause(); } catch {}
-    fsVideo.srcObject = null;
-    fsSource = null;
-  }
-
-  fsClose.addEventListener("click", closePseudoFullscreen);
-  fsNightBtn.addEventListener("click", () => {
-    if (!fsSource?.toggleNight) return;
-    fsSource.toggleNight();
-    fsVideo.classList.toggle("night", !!fsSource.isNight?.());
-  });
-  fsMuteBtn.addEventListener("click", () => {
-    if (!fsSource?.toggleMute) return;
-    fsSource.toggleMute();
-    // reflect
-    fsMuteBtn.textContent = fsSource.isMuted?.() ? "🔇" : "🔈";
-  });
-
-  // ===== Sender logic =====
+  // ===== Sender =====
   let sendPc = null;
   let sendStream = null;
   let currentFacing = "environment";
   let micOn = true;
   let nightLocalOn = false;
   let torchOn = false;
-  let lastOfferPacked = "";
 
-  async function startCameraHighest() {
+  async function startCameraHighest(){
     const constraints = {
       audio: true,
       video: {
@@ -694,17 +480,14 @@
     sendStream = await navigator.mediaDevices.getUserMedia(constraints);
     localVideo.srcObject = sendStream;
 
-    // enable UI
     btnStopAllSend.disabled = false;
     btnFlipCam.disabled = false;
     btnMicMute.disabled = false;
     btnNightLocal.disabled = false;
     btnTorch.disabled = false;
     btnMakeOffer.disabled = false;
-    btnFsLocal.disabled = false;
-    btnPasteAnswerFromClipboard.disabled = false;
+    btnFullLocal.disabled = false;
 
-    // actual settings
     const vtrack = sendStream.getVideoTracks()[0];
     const atrack = sendStream.getAudioTracks()[0];
     const s = vtrack.getSettings ? vtrack.getSettings() : {};
@@ -718,17 +501,20 @@
     sendConn.textContent = "配信中（Offer作成へ）";
   }
 
-  function stopSenderAll() {
-    try { if (sendPc) sendPc.close(); } catch {}
+  function stopSenderAll(){
+    try{ if(sendPc) sendPc.close(); }catch{}
     sendPc = null;
 
-    if (sendStream) sendStream.getTracks().forEach(t => t.stop());
+    if(sendStream) sendStream.getTracks().forEach(t=>t.stop());
     sendStream = null;
 
-    offerLinkOut.value = "";
     offerOut.value = "";
     answerIn.value = "";
-    lastOfferPacked = "";
+
+    btnCopyOffer.disabled = true;
+    btnShareOffer.disabled = true;
+    btnPasteAnswer.disabled = true;
+    btnConnectSend.disabled = true;
 
     btnStopAllSend.disabled = true;
     btnFlipCam.disabled = true;
@@ -736,544 +522,329 @@
     btnNightLocal.disabled = true;
     btnTorch.disabled = true;
     btnMakeOffer.disabled = true;
-    btnShareOffer.disabled = true;
-    btnCopyOffer.disabled = true;
-    btnConnectSend.disabled = true;
-    btnPasteAnswerFromClipboard.disabled = true;
-    btnFsLocal.disabled = true;
+    btnFullLocal.disabled = true;
 
     micOn = true;
-    nightLocalOn = false;
-    torchOn = false;
-
     btnMicMute.textContent = "🎤 マイク：ON";
+    nightLocalOn = false;
     localVideo.classList.remove("night");
     btnNightLocal.textContent = "🌙 暗視：OFF";
+    torchOn = false;
     btnTorch.textContent = "🔦 ライト：OFF";
+    btnTorch.disabled = true; // 再開後に再判定
     camInfo.textContent = "未開始";
+
     sendConn.textContent = "停止";
-    globalState.textContent = "送信：停止";
   }
 
-  async function flipCamera() {
+  async function flipCamera(){
     currentFacing = (currentFacing === "environment") ? "user" : "environment";
-    if (sendStream) sendStream.getTracks().forEach(t => t.stop());
+    if(sendStream) sendStream.getTracks().forEach(t=>t.stop());
     sendStream = null;
     await startCameraHighest();
   }
 
-  function toggleMic() {
-    if (!sendStream) return;
+  function toggleMic(){
+    if(!sendStream) return;
     const atrack = sendStream.getAudioTracks()[0];
-    if (!atrack) return;
+    if(!atrack) return;
     micOn = !micOn;
     atrack.enabled = micOn;
     btnMicMute.textContent = micOn ? "🎤 マイク：ON" : "🎤 マイク：MUTE";
   }
 
-  function toggleNightLocal() {
+  function toggleNightLocal(){
     nightLocalOn = !nightLocalOn;
     localVideo.classList.toggle("night", nightLocalOn);
     btnNightLocal.textContent = nightLocalOn ? "🌙 暗視：ON" : "🌙 暗視：OFF";
   }
 
-  async function toggleTorch() {
-    if (!sendStream) return;
+  async function toggleTorch(){
+    if(!sendStream) return;
     const vtrack = sendStream.getVideoTracks()[0];
-    if (!vtrack) return;
-    try {
+    if(!vtrack) return;
+    try{
       torchOn = !torchOn;
       await vtrack.applyConstraints({ advanced: [{ torch: torchOn }] });
       btnTorch.textContent = torchOn ? "🔦 ライト：ON" : "🔦 ライト：OFF";
       btnTorch.disabled = false;
-    } catch {
+    }catch{
       torchOn = false;
       btnTorch.textContent = "🔦 ライト：非対応";
       btnTorch.disabled = true;
     }
   }
 
-  function waitIceGathering(pc, timeoutMs = 6500) {
-    return new Promise((resolve) => {
-      let done = false;
-      let lastCandAt = Date.now();
+  async function makeOffer(){
+    if(!sendStream) throw new Error("先に「カメラ開始」をしてください。");
 
-      const finish = () => {
-        if (done) return;
-        done = true;
-        resolve();
-      };
-
-      pc.onicecandidate = (e) => {
-        if (!e.candidate) { finish(); return; }
-        lastCandAt = Date.now();
-      };
-
-      const t = setInterval(() => {
-        if (done) { clearInterval(t); return; }
-        const quiet = Date.now() - lastCandAt;
-        if (pc.iceGatheringState === "complete" || quiet > 700) {
-          clearInterval(t);
-          finish();
-        }
-      }, 250);
-
-      setTimeout(() => { clearInterval(t); finish(); }, timeoutMs);
-    });
-  }
-
-  async function makeOffer() {
-    if (!sendStream) throw new Error("先に「カメラ開始」してください。");
-
-    try { if (sendPc) sendPc.close(); } catch {}
+    // 既存があればクローズ
+    try{ if(sendPc) sendPc.close(); }catch{}
     sendPc = new RTCPeerConnection(pcConfig);
 
-    sendStream.getTracks().forEach(tr => sendPc.addTrack(tr, sendStream));
+    sendStream.getTracks().forEach(tr=>sendPc.addTrack(tr, sendStream));
 
-    sendPc.onconnectionstatechange = () => {
-      sendConn.textContent = sendPc.connectionState;
+    const candidates = [];
+    sendPc.onicecandidate = (e)=>{
+      if(!e.candidate) return;
+      const s = e.candidate.candidate || "";
+      if(isHostCandidate(s)) candidates.push(e.candidate);
     };
-
-    globalState.textContent = "送信：Offer作成中…";
+    sendPc.onconnectionstatechange = ()=>{ sendConn.textContent = sendPc.connectionState; };
 
     const offer = await sendPc.createOffer();
     await sendPc.setLocalDescription(offer);
+    await waitIceComplete(sendPc);
 
-    await waitIceGathering(sendPc);
+    const payload = { sdp: sendPc.localDescription, candidates };
+    const text = JSON.stringify(payload);
 
-    const packed = packDesc(sendPc.localDescription);
-    lastOfferPacked = packed;
-
-    const offerLink = buildLink("offer", packed);
-    offerLinkOut.value = offerLink;
-
-    offerOut.value = JSON.stringify({
-      type: sendPc.localDescription.type,
-      sdp: filterHostCandidatesInSdp(sendPc.localDescription.sdp || "")
-    });
-
-    btnShareOffer.disabled = false;
+    offerOut.value = text;
     btnCopyOffer.disabled = false;
+    btnShareOffer.disabled = false;
+    btnPasteAnswer.disabled = false;
     btnConnectSend.disabled = false;
-
-    globalState.textContent = "送信：Offer作成済（AirDropで送る）";
-    sendConn.textContent = "Offer作成済";
+    sendConn.textContent = "Offer作成済（受信側へ共有）";
   }
 
-  async function connectWithAnswerPacked(packed) {
-    if (!sendPc) throw new Error("送信側で「Offer作成」したタブでAnswerリンクを開いてください。");
-    const desc = unpackDesc(packed);
-    await sendPc.setRemoteDescription(desc);
+  async function connectWithAnswer(){
+    if(!sendPc) throw new Error("先に「Offer作成」をしてください。");
+    const raw = (answerIn.value || "").trim();
+    if(!raw) throw new Error("Answerを貼り付けてください。");
+
+    let payload;
+    try{ payload = JSON.parse(raw); }
+    catch{ throw new Error("Answerの形式が不正です（途中で欠けている可能性）。"); }
+
+    await sendPc.setRemoteDescription(payload.sdp);
+    if(Array.isArray(payload.candidates)){
+      for(const c of payload.candidates){
+        const s = c.candidate || "";
+        if(isHostCandidate(s)){
+          try{ await sendPc.addIceCandidate(c); }catch{}
+        }
+      }
+    }
+    sendConn.textContent = "接続中…";
   }
 
-  async function connectWithAnswerCodeText(text) {
-    if (!sendPc) throw new Error("先にOffer作成が必要です。");
-    const obj = JSON.parse(text);
-    if (!obj || !obj.type || !obj.sdp) throw new Error("Answerコードの形式が不正です");
-    await sendPc.setRemoteDescription({ type: obj.type, sdp: obj.sdp });
-  }
-
-  // Sender handlers
-  btnStartCam.addEventListener("click", async () => {
-    try {
+  btnStartCam.addEventListener("click", async ()=>{
+    try{
       globalState.textContent = "送信：カメラ開始中…";
+      btnTorch.disabled = false;
       await startCameraHighest();
-      globalState.textContent = "送信：準備OK（Offer作成へ）";
-    } catch {
+      globalState.textContent = "送信：準備OK";
+    }catch(e){
       globalState.textContent = "エラー";
       alert("カメラ/マイクの許可が必要です（HTTPSで開いてください）。");
+      throw e;
     }
   });
-
   btnStopAllSend.addEventListener("click", stopSenderAll);
-  btnFlipCam.addEventListener("click", async () => { try { await flipCamera(); } catch { alert("カメラ切替に失敗しました"); } });
+  btnFlipCam.addEventListener("click", async ()=>{ try{ await flipCamera(); }catch{ alert("カメラ切替に失敗しました"); } });
   btnMicMute.addEventListener("click", toggleMic);
   btnNightLocal.addEventListener("click", toggleNightLocal);
   btnTorch.addEventListener("click", toggleTorch);
+  btnFullLocal.addEventListener("click", ()=>togglePseudoFS(localWrap, localVideo));
+  localVideo.addEventListener("dblclick", ()=>togglePseudoFS(localWrap, localVideo));
 
-  btnMakeOffer.addEventListener("click", async () => {
-    try { await makeOffer(); }
-    catch (e) { globalState.textContent="エラー"; alert(e.message||"Offer作成に失敗"); }
-  });
-
-  btnCopyOffer.addEventListener("click", async () => {
-    const ok = await safeCopy(offerLinkOut.value || offerOut.value);
-    if (!ok) alert("コピーに失敗しました");
-  });
-
-  btnShareOffer.addEventListener("click", async () => {
-    const url = offerLinkOut.value;
-    if (!url) return;
-    await shareLink("Offer（受信側で開く）", url);
-  });
-
-  btnPasteAnswerFromClipboard.addEventListener("click", async () => {
-    const text = await readClipboard();
-    if (!text) return alert("クリップボードが空です");
-    const m = text.match(/#a=([^ \n]+)/);
-    if (m) {
-      try {
-        globalState.textContent = "送信：Answerリンク検出 → 接続中…";
-        await connectWithAnswerPacked(m[1]);
-        globalState.textContent = "送信：接続処理OK（状態を確認）";
-      } catch (e) {
-        alert(e.message || "接続できませんでした。送信側のOffer作成タブで開いてください。");
-      }
-      return;
+  btnMakeOffer.addEventListener("click", async ()=>{
+    try{
+      globalState.textContent = "送信：Offer作成中…";
+      await makeOffer();
+      globalState.textContent = "送信：Offer作成済（共有へ）";
+    }catch(e){
+      globalState.textContent = "エラー";
+      alert(e.message || "Offer作成に失敗しました");
+      throw e;
     }
-    // JSON fallback
-    answerIn.value = text;
-    alert("貼り付けました。必要なら「手動で接続」を押してください。");
   });
 
-  btnConnectSend.addEventListener("click", async () => {
-    try {
+  btnCopyOffer.addEventListener("click", ()=>safeCopy(offerOut.value));
+  btnShareOffer.addEventListener("click", ()=>shareText("ベビーモニター Offer", offerOut.value));
+
+  btnPasteAnswer.addEventListener("click", async ()=>{
+    const t = (await safePaste()).trim();
+    if(t) answerIn.value = t;
+  });
+
+  btnConnectSend.addEventListener("click", async ()=>{
+    try{
       globalState.textContent = "送信：接続中…";
-      const t = (answerIn.value || "").trim();
-      if (!t) throw new Error("Answerが空です（Answerリンクを開くのが最速です）");
-      const m = t.match(/#a=([^ \n]+)/);
-      if (m) await connectWithAnswerPacked(m[1]);
-      else await connectWithAnswerCodeText(t);
+      await connectWithAnswer();
       globalState.textContent = "送信：接続処理OK（状態を確認）";
-    } catch (e) {
+    }catch(e){
       globalState.textContent = "エラー";
       alert(e.message || "接続に失敗しました");
+      throw e;
     }
   });
 
-  // Ultimate quick start (camera -> offer -> share) in one user gesture
-  btnQuickStartSend.addEventListener("click", async () => {
-    try {
-      setMode("send");
-      globalState.textContent = "送信：ワンタップ開始中…";
-      if (!sendStream) await startCameraHighest();
-      if (!offerLinkOut.value) await makeOffer();
-      await shareLink("Offer（受信側で開く）", offerLinkOut.value);
-      globalState.textContent = "送信：Offer送信済（受信側の返送を待つ）";
-    } catch (e) {
-      globalState.textContent = "エラー";
-      alert(e.message || "ワンタップ開始に失敗しました");
-    }
-  });
-
-  // local pseudo fullscreen
-  btnFsLocal.addEventListener("click", () => {
-    openPseudoFullscreen(localVideo, "送信：全画面プレビュー", {
-      toggleNight: toggleNightLocal,
-      isNight: () => nightLocalOn,
-      toggleMute: () => {}, // local is muted always
-      isMuted: () => true,
-      forceMuted: true
-    });
-  });
-
-  // ===== Receiver logic =====
+  // ===== Receiver =====
   let recvPc = null;
   let recvStream = null;
   let spkOn = true;
   let nightRemoteOn = false;
-  let lastOfferPacked = ""; // for quick return
 
-  function resetReceiverAll() {
-    try { if (recvPc) recvPc.close(); } catch {}
+  function resetReceiverAll(){
+    try{ if(recvPc) recvPc.close(); }catch{}
     recvPc = null;
     recvStream = null;
-    remoteVideo.srcObject = null;
 
-    // reset UI
-    offerIn.value = "";
-    answerLinkOut.value = "";
+    remoteVideo.srcObject = null;
     answerOut.value = "";
+
     btnShareAnswer.disabled = true;
     btnCopyAnswer.disabled = true;
-    btnResetRecv.disabled = true;
 
     btnPlayRemote.disabled = true;
     btnSpkMute.disabled = true;
     btnNightRemote.disabled = true;
-    btnFsRemote.disabled = true;
-    btnFullAlt.disabled = true;
+    btnFullRemote.disabled = true;
+    btnForceIOSFS.disabled = true;
 
-    // audio policy: start muted for autoplay success on iOS
+    btnResetRecv.disabled = true;
+
     spkOn = true;
-    remoteVideo.muted = true;
-    btnSpkMute.textContent = "🔈 音：ON（再生後）";
+    remoteVideo.muted = false;
+    btnSpkMute.textContent = "🔈 音：ON";
 
     nightRemoteOn = false;
     remoteVideo.classList.remove("night");
     btnNightRemote.textContent = "🌙 暗視：OFF";
 
-    playOverlay.classList.add("hidden");
-
     recvConn.textContent = "未接続";
     globalState.textContent = "受信：待機中";
-    lastOfferPacked = "";
   }
 
-  async function makeAnswerFromOfferPacked(packed) {
-    lastOfferPacked = packed;
+  async function makeAnswer(){
+    const raw = (offerIn.value || "").trim();
+    if(!raw) throw new Error("Offerを貼り付けてください。");
 
-    try { if (recvPc) recvPc.close(); } catch {}
+    let offerPayload;
+    try{ offerPayload = JSON.parse(raw); }
+    catch{ throw new Error("Offerの形式が不正です（途中で欠けている可能性）。"); }
+
+    try{ if(recvPc) recvPc.close(); }catch{}
     recvPc = new RTCPeerConnection(pcConfig);
 
-    recvPc.onconnectionstatechange = () => {
-      recvConn.textContent = recvPc.connectionState;
+    const candidates = [];
+    recvPc.onicecandidate = (e)=>{
+      if(!e.candidate) return;
+      const s = e.candidate.candidate || "";
+      if(isHostCandidate(s)) candidates.push(e.candidate);
     };
 
-    recvPc.ontrack = (e) => {
-      if (!recvStream) recvStream = new MediaStream();
+    recvPc.ontrack = (e)=>{
+      if(!recvStream) recvStream = new MediaStream();
       recvStream.addTrack(e.track);
       remoteVideo.srcObject = recvStream;
 
-      // enable controls
       btnPlayRemote.disabled = false;
       btnSpkMute.disabled = false;
       btnNightRemote.disabled = false;
-      btnFsRemote.disabled = false;
-      btnFullAlt.disabled = false;
+      btnFullRemote.disabled = false;
+      btnForceIOSFS.disabled = false;
       btnResetRecv.disabled = false;
 
-      // iOS autoplay: keep muted true, try play; show overlay if fails
-      remoteVideo.muted = true;
-      const p = remoteVideo.play();
-      if (p && typeof p.then === "function") {
-        p.then(() => {
-          playOverlay.classList.add("hidden");
-        }).catch(() => {
-          // show overlay for manual play
-          playOverlay.classList.remove("hidden");
-          // insurance: show native controls for iOS sometimes helps
-          if (isIOS) remoteVideo.controls = true;
-        });
-      } else {
-        // no promise
-        playOverlay.classList.remove("hidden");
-        if (isIOS) remoteVideo.controls = true;
-      }
+      // autoplay try (will often fail on iOS for audio)
+      remoteVideo.play().catch(()=>{});
     };
 
-    globalState.textContent = "受信：Answer作成中…";
-    const offerDesc = unpackDesc(packed);
-    await recvPc.setRemoteDescription(offerDesc);
+    recvPc.onconnectionstatechange = ()=>{ recvConn.textContent = recvPc.connectionState; };
+
+    await recvPc.setRemoteDescription(offerPayload.sdp);
+    if(Array.isArray(offerPayload.candidates)){
+      for(const c of offerPayload.candidates){
+        const s = c.candidate || "";
+        if(isHostCandidate(s)){
+          try{ await recvPc.addIceCandidate(c); }catch{}
+        }
+      }
+    }
 
     const answer = await recvPc.createAnswer();
     await recvPc.setLocalDescription(answer);
+    await waitIceComplete(recvPc);
 
-    await waitIceGathering(recvPc);
+    const payload = { sdp: recvPc.localDescription, candidates };
+    const outText = JSON.stringify(payload);
 
-    const packedAns = packDesc(recvPc.localDescription);
-    const ansLink = buildLink("answer", packedAns);
-    answerLinkOut.value = ansLink;
-
-    answerOut.value = JSON.stringify({
-      type: recvPc.localDescription.type,
-      sdp: filterHostCandidatesInSdp(recvPc.localDescription.sdp || "")
-    });
-
+    answerOut.value = outText;
     btnShareAnswer.disabled = false;
     btnCopyAnswer.disabled = false;
     btnResetRecv.disabled = false;
 
-    globalState.textContent = "受信：Answer作成済（AirDropで返送）";
+    globalState.textContent = "受信：Answer作成済（送信側へ返す）";
     recvConn.textContent = "Answer作成済";
   }
 
-  // receiver handlers
-  btnResetRecv.addEventListener("click", resetReceiverAll);
-
-  btnPasteOfferFromClipboard.addEventListener("click", async () => {
-    const text = await readClipboard();
-    if (!text) return alert("クリップボードが空です");
-
-    const m = text.match(/#o=([^ \n]+)/);
-    if (m) {
-      try {
-        setMode("recv");
-        await makeAnswerFromOfferPacked(m[1]);
-      } catch (e) {
-        alert(e.message || "Answer作成に失敗しました");
-      }
-      return;
-    }
-
-    offerIn.value = text;
-    alert("貼り付けました。必要なら「Answer作成」を押してください。");
+  btnPasteOffer.addEventListener("click", async ()=>{
+    const t = (await safePaste()).trim();
+    if(t) offerIn.value = t;
   });
 
-  btnMakeAnswer.addEventListener("click", async () => {
-    try {
-      const t = (offerIn.value || "").trim();
-      if (!t) throw new Error("Offerが空です（Offerリンクを開くのが最速です）");
-
-      const m = t.match(/#o=([^ \n]+)/);
-      if (m) {
-        await makeAnswerFromOfferPacked(m[1]);
-      } else {
-        const obj = JSON.parse(t);
-        if (!obj || !obj.type || !obj.sdp) throw new Error("Offerコードの形式が不正です");
-        const packed = b64uEncode(te.encode(JSON.stringify({ type: obj.type, sdp: filterHostCandidatesInSdp(obj.sdp) })));
-        await makeAnswerFromOfferPacked(packed);
-      }
-    } catch (e) {
+  btnMakeAnswer.addEventListener("click", async ()=>{
+    try{
+      globalState.textContent = "受信：Answer作成中…";
+      await makeAnswer();
+    }catch(e){
       globalState.textContent = "エラー";
       alert(e.message || "Answer作成に失敗しました");
+      throw e;
     }
   });
 
-  btnShareAnswer.addEventListener("click", async () => {
-    const url = answerLinkOut.value;
-    if (!url) return;
-    await shareLink("Answer（送信側で開く）", url);
-  });
+  btnShareAnswer.addEventListener("click", ()=>shareText("ベビーモニター Answer", answerOut.value));
+  btnCopyAnswer.addEventListener("click", ()=>safeCopy(answerOut.value));
 
-  btnCopyAnswer.addEventListener("click", async () => {
-    const ok = await safeCopy(answerLinkOut.value || answerOut.value);
-    if (!ok) alert("コピーに失敗しました");
-  });
-
-  // Ultimate quick return: make answer (if not yet) then share
-  btnQuickReturnRecv.addEventListener("click", async () => {
-    try {
-      setMode("recv");
-      globalState.textContent = "受信：ワンタップ返送中…";
-
-      // if answer not ready, try to create from lastOfferPacked or fragment or offerIn
-      if (!answerLinkOut.value) {
-        if (lastOfferPacked) {
-          await makeAnswerFromOfferPacked(lastOfferPacked);
-        } else {
-          const frag = parseFragment();
-          if (frag?.kind === "offer") {
-            await makeAnswerFromOfferPacked(frag.data);
-          } else {
-            const t = (offerIn.value || "").trim();
-            const m = t.match(/#o=([^ \n]+)/);
-            if (m) await makeAnswerFromOfferPacked(m[1]);
-            else throw new Error("Offerがまだありません。先にOfferリンクを開くか、Offerを貼り付けてください。");
-          }
-        }
-      }
-
-      await shareLink("Answer（送信側で開く）", answerLinkOut.value);
-      globalState.textContent = "受信：Answer返送済（送信側で開く）";
-    } catch (e) {
-      globalState.textContent = "エラー";
-      alert(e.message || "ワンタップ返送に失敗しました");
-    }
-  });
-
-  // Play controls: iOS autoplay fix
-  async function userPlayRemote() {
-    try {
-      // play with user gesture
+  btnPlayRemote.addEventListener("click", async ()=>{
+    try{
+      // iOS autoplay制限突破：ユーザー操作で play
       await remoteVideo.play();
-      playOverlay.classList.add("hidden");
-
-      // after play, apply speaker state
-      remoteVideo.muted = !spkOn;
-      btnSpkMute.textContent = spkOn ? "🔈 音：ON" : "🔇 音：MUTE";
-      globalState.textContent = "受信：再生中";
-    } catch {
-      // fallback: show controls
-      if (isIOS) remoteVideo.controls = true;
-      alert("再生できませんでした。もう一度「▶再生」を押すか、動画の再生ボタン（コントロール）を操作してください。");
+      toast("再生しました");
+    }catch{
+      alert("再生できません。ミュートONにしてから再生→後で音ONにすると成功しやすいです。");
     }
-  }
+  });
 
-  btnPlayRemote.addEventListener("click", userPlayRemote);
-  btnPlayOverlay.addEventListener("click", userPlayRemote);
-
-  btnSpkMute.addEventListener("click", () => {
+  btnSpkMute.addEventListener("click", ()=>{
     spkOn = !spkOn;
-    // iOS: if not started, keep muted; after play it will reflect
-    if (!remoteVideo.paused && remoteVideo.srcObject) {
-      remoteVideo.muted = !spkOn;
-    }
+    remoteVideo.muted = !spkOn;
     btnSpkMute.textContent = spkOn ? "🔈 音：ON" : "🔇 音：MUTE";
   });
 
-  btnNightRemote.addEventListener("click", () => {
+  btnNightRemote.addEventListener("click", ()=>{
     nightRemoteOn = !nightRemoteOn;
     remoteVideo.classList.toggle("night", nightRemoteOn);
     btnNightRemote.textContent = nightRemoteOn ? "🌙 暗視：ON" : "🌙 暗視：OFF";
   });
 
-  // remote pseudo fullscreen (always works)
-  function openRemoteFs() {
-    openPseudoFullscreen(remoteVideo, "受信：全画面", {
-      toggleNight: () => {
-        nightRemoteOn = !nightRemoteOn;
-        remoteVideo.classList.toggle("night", nightRemoteOn);
-        btnNightRemote.textContent = nightRemoteOn ? "🌙 暗視：ON" : "🌙 暗視：OFF";
-      },
-      isNight: () => nightRemoteOn,
-      toggleMute: () => {
-        spkOn = !spkOn;
-        if (!remoteVideo.paused && remoteVideo.srcObject) remoteVideo.muted = !spkOn;
-        btnSpkMute.textContent = spkOn ? "🔈 音：ON" : "🔇 音：MUTE";
-      },
-      isMuted: () => !spkOn,
-      forceMuted: false
-    });
+  btnFullRemote.addEventListener("click", ()=>togglePseudoFS(remoteWrap, remoteVideo));
+  remoteVideo.addEventListener("dblclick", ()=>togglePseudoFS(remoteWrap, remoteVideo));
 
-    // ensure fs reflects audio state
-    fsMuteBtn.textContent = (!spkOn) ? "🔇" : "🔈";
-  }
-  btnFsRemote.addEventListener("click", openRemoteFs);
-  btnFullAlt.addEventListener("click", openRemoteFs);
-
-  // ===== Deep-link auto flow (ultimate) =====
-  async function handleDeepLink() {
-    const frag = parseFragment();
-    if (!frag) return;
-
-    // Offer link opened -> switch to recv, auto make answer (no auto share because iOS blocks if not user gesture)
-    if (frag.kind === "offer") {
-      setMode("recv");
-      globalState.textContent = "受信：Offer受信 → Answer作成中…";
-      try {
-        await makeAnswerFromOfferPacked(frag.data);
-        // guide: enable quick return button (already enabled)
-        globalState.textContent = "受信：Answer作成済（ワンタップ返送）";
-      } catch {
-        globalState.textContent = "受信：Offer受信（手動でAnswer作成してください）";
-      }
-      return;
+  // iOSネイティブのvideo fullscreen（対応端末のみ）
+  btnForceIOSFS.addEventListener("click", ()=>{
+    try{
+      if(remoteVideo.webkitEnterFullscreen) remoteVideo.webkitEnterFullscreen();
+      else togglePseudoFS(remoteWrap, remoteVideo);
+    }catch{
+      togglePseudoFS(remoteWrap, remoteVideo);
     }
+  });
 
-    // Answer link opened -> should be opened on sender tab where sendPc exists
-    if (frag.kind === "answer") {
-      setMode("send");
-      try {
-        if (!sendPc) throw new Error("送信側で「カメラ開始→Offer作成」したタブを開いたまま、そのタブでAnswerリンクを開いてください。");
-        globalState.textContent = "送信：Answer受信 → 接続中…";
-        await connectWithAnswerPacked(frag.data);
-        globalState.textContent = "送信：接続処理OK（状態を確認）";
-      } catch (e) {
-        alert(e.message || "接続できませんでした。送信側のOffer作成タブで開いてください。");
-      }
-      return;
-    }
-  }
+  btnResetRecv.addEventListener("click", resetReceiverAll);
 
   // ===== Init =====
-  setMode(mode);
   resetReceiverAll();
+  btnTorch.disabled = true;
 
-  // cleanup
-  window.addEventListener("beforeunload", () => {
+  // unload cleanup
+  window.addEventListener("beforeunload", ()=>{
     stopSenderAll();
     resetReceiverAll();
   });
 
-  // sender: enable initial state
-  sendConn.textContent = "未接続";
-
-  // local fullscreen uses pseudo layer too
-  // (already wired above)
-
-  // run deep link
-  handleDeepLink().catch(() => {});
 })();
 </script>
 </body>
