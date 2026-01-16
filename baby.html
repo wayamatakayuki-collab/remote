@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>Baby Monitor - Sender</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { -webkit-tap-highlight-color: transparent; }
+    video { background:#000; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+  <div class="max-w-3xl mx-auto p-4 space-y-4">
+    <header class="space-y-1">
+      <div class="text-xl font-black">ベビーモニター（送信）</div>
+      <div class="text-xs text-slate-500">同じWi-Fi内／サーバ不要（Offer/Answerをコピペ）</div>
+    </header>
+
+    <section class="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <div class="font-bold">① 配信開始</div>
+        <div class="flex items-center gap-2">
+          <button id="btnStart" class="px-3 py-2 rounded-xl bg-sky-600 text-white font-bold">配信開始</button>
+          <button id="btnStop" class="px-3 py-2 rounded-xl bg-slate-200 font-bold" disabled>停止</button>
+        </div>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-3">
+        <div class="space-y-2">
+          <div class="text-sm font-bold text-slate-600">プレビュー</div>
+          <video id="localVideo" class="w-full rounded-2xl aspect-video" playsinline muted autoplay></video>
+
+          <div class="grid grid-cols-2 gap-2">
+            <label class="text-xs font-bold text-slate-600">画質</label>
+            <select id="selQuality" class="text-sm rounded-xl border border-slate-200 px-3 py-2">
+              <option value="low">低（省通信）</option>
+              <option value="mid" selected>中（おすすめ）</option>
+              <option value="high">高</option>
+            </select>
+          </div>
+
+          <div class="flex items-center justify-between">
+            <label class="flex items-center gap-2 text-sm font-bold">
+              <input id="chkWake" type="checkbox" class="w-4 h-4" />
+              画面スリープ防止（対応端末のみ）
+            </label>
+            <div id="wakeState" class="text-xs text-slate-500"></div>
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <div class="text-sm font-bold text-slate-600">音量メーター（簡易）</div>
+          <div class="w-full h-3 bg-slate-200 rounded-full overflow-hidden">
+            <div id="vuBar" class="h-full bg-emerald-500 w-0"></div>
+          </div>
+          <div class="grid grid-cols-2 gap-2 items-center">
+            <div class="text-xs text-slate-500">しきい値</div>
+            <input id="rngThresh" type="range" min="5" max="60" value="25" class="w-full" />
+            <div class="text-xs text-slate-500">現在</div>
+            <div id="vuText" class="text-xs font-bold">0</div>
+          </div>
+          <div class="text-xs text-slate-500">
+            ※泣き声検知ではなく「音が大きい時に通知」する簡易アラートです。
+          </div>
+          <div id="alertState" class="text-sm font-bold text-slate-600"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <div class="font-bold">② Offerを作成してコピー</div>
+        <div class="flex items-center gap-2">
+          <button id="btnMakeOffer" class="px-3 py-2 rounded-xl bg-indigo-600 text-white font-bold" disabled>Offer作成</button>
+          <button id="btnCopyOffer" class="px-3 py-2 rounded-xl bg-slate-200 font-bold" disabled>コピー</button>
+        </div>
+      </div>
+      <textarea id="txtOffer" class="w-full h-40 rounded-xl border border-slate-200 p-3 text-xs font-mono" placeholder="ここにOfferが出ます（コピーして見守り端末へ）" readonly></textarea>
+    </section>
+
+    <section class="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <div class="font-bold">④ Answerを貼って接続</div>
+        <div class="flex items-center gap-2">
+          <button id="btnConnect" class="px-3 py-2 rounded-xl bg-emerald-600 text-white font-bold" disabled>接続する</button>
+        </div>
+      </div>
+      <textarea id="txtAnswer" class="w-full h-40 rounded-xl border border-slate-200 p-3 text-xs font-mono" placeholder="見守り端末で生成したAnswer(JSON)をここに貼り付け"></textarea>
+
+      <div class="flex items-center justify-between">
+        <div class="text-sm">
+          状態：<span id="connState" class="font-bold">未接続</span>
+        </div>
+        <div class="text-xs text-slate-500">※同じWi-Fi内で使ってください</div>
+      </div>
+    </section>
+
+    <footer class="text-xs text-slate-500">
+      注意：医療機器ではありません。目を離す時間の“補助”としての用途を想定しています。
+    </footer>
+  </div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+
+  const localVideo = $("localVideo");
+  const btnStart = $("btnStart");
+  const btnStop = $("btnStop");
+  const selQuality = $("selQuality");
+
+  const chkWake = $("chkWake");
+  const wakeState = $("wakeState");
+
+  const btnMakeOffer = $("btnMakeOffer");
+  const btnCopyOffer = $("btnCopyOffer");
+  const txtOffer = $("txtOffer");
+
+  const txtAnswer = $("txtAnswer");
+  const btnConnect = $("btnConnect");
+  const connState = $("connState");
+
+  const vuBar = $("vuBar");
+  const vuText = $("vuText");
+  const rngThresh = $("rngThresh");
+  const alertState = $("alertState");
+
+  let stream = null;
+  let pc = null;
+  let dataChannel = null;
+  let wakeLock = null;
+
+  let audioCtx = null;
+  let analyser = null;
+  let volTimer = null;
+  let loudCount = 0;
+
+  const iceServers = [
+    { urls: "stun:stun.l.google.com:19302" }
+    // 同一Wi-Fiだけで、かつネットが無い環境なら、ここを空配列にしてもOK：
+    // const iceServers = [];
+  ];
+
+  function qualityToConstraints(q) {
+    if (q === "low")  return { width: { ideal: 320 },  height: { ideal: 180 }, frameRate: { ideal: 10, max: 15 } };
+    if (q === "high") return { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 24, max: 30 } };
+    return              { width: { ideal: 640 },  height: { ideal: 360 }, frameRate: { ideal: 15, max: 20 } };
+  }
+
+  async function startStream() {
+    const video = qualityToConstraints(selQuality.value);
+    stream = await navigator.mediaDevices.getUserMedia({ video, audio: true });
+    localVideo.srcObject = stream;
+
+    btnStart.disabled = true;
+    btnStop.disabled = false;
+    btnMakeOffer.disabled = false;
+    connState.textContent = "配信準備OK（Offer作成へ）";
+
+    setupAudioMeter(stream);
+  }
+
+  function stopAll() {
+    try { if (volTimer) clearInterval(volTimer); } catch {}
+    volTimer = null;
+    loudCount = 0;
+
+    if (audioCtx) {
+      try { audioCtx.close(); } catch {}
+    }
+    audioCtx = null;
+    analyser = null;
+
+    if (dataChannel) {
+      try { dataChannel.close(); } catch {}
+    }
+    dataChannel = null;
+
+    if (pc) {
+      try { pc.close(); } catch {}
+    }
+    pc = null;
+
+    if (stream) {
+      stream.getTracks().forEach(t => t.stop());
+    }
+    stream = null;
+
+    txtOffer.value = "";
+    txtAnswer.value = "";
+
+    btnStart.disabled = false;
+    btnStop.disabled = true;
+    btnMakeOffer.disabled = true;
+    btnCopyOffer.disabled = true;
+    btnConnect.disabled = true;
+
+    connState.textContent = "停止";
+    vuBar.style.width = "0%";
+    vuText.textContent = "0";
+    alertState.textContent = "";
+  }
+
+  async function copyText(el) {
+    const text = el.value;
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      el.focus();
+      el.select();
+      document.execCommand("copy");
+    }
+  }
+
+  function waitIceComplete(pc) {
+    return new Promise(resolve => {
+      if (pc.iceGatheringState === "complete") return resolve();
+      const check = () => {
+        if (pc.iceGatheringState === "complete") {
+          pc.removeEventListener("icegatheringstatechange", check);
+          resolve();
+        }
+      };
+      pc.addEventListener("icegatheringstatechange", check);
+    });
+  }
+
+  async function makeOffer() {
+    if (!stream) return;
+
+    pc = new RTCPeerConnection({ iceServers });
+
+    // DataChannel（音量アラート用）
+    dataChannel = pc.createDataChannel("alerts");
+    dataChannel.onopen = () => { alertState.textContent = "アラート送信：ON"; };
+    dataChannel.onclose = () => { alertState.textContent = "アラート送信：OFF"; };
+
+    stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+    const candidates = [];
+    pc.onicecandidate = (e) => {
+      if (e.candidate) candidates.push(e.candidate);
+    };
+
+    pc.onconnectionstatechange = () => {
+      connState.textContent = pc.connectionState;
+    };
+
+    const offer = await pc.createOffer({ offerToReceiveAudio: false, offerToReceiveVideo: false });
+    await pc.setLocalDescription(offer);
+    await waitIceComplete(pc);
+
+    const payload = {
+      sdp: pc.localDescription,
+      candidates
+    };
+
+    txtOffer.value = JSON.stringify(payload);
+    btnCopyOffer.disabled = false;
+    btnConnect.disabled = false;
+    connState.textContent = "Offer作成済（見守り側でAnswer作成→貼り付け）";
+  }
+
+  async function connectWithAnswer() {
+    if (!pc) return;
+    let answerObj = null;
+    try {
+      answerObj = JSON.parse(txtAnswer.value.trim());
+    } catch {
+      alert("Answer(JSON)の形式が不正です。見守り側の出力をそのまま貼り付けてください。");
+      return;
+    }
+
+    await pc.setRemoteDescription(answerObj.sdp);
+    if (Array.isArray(answerObj.candidates)) {
+      for (const c of answerObj.candidates) {
+        try { await pc.addIceCandidate(c); } catch {}
+      }
+    }
+
+    connState.textContent = "接続中…";
+  }
+
+  // Wake Lock
+  async function setWakeLock(on) {
+    if (!("wakeLock" in navigator)) {
+      wakeState.textContent = "この端末は非対応";
+      return;
+    }
+    try {
+      if (on) {
+        wakeLock = await navigator.wakeLock.request("screen");
+        wakeState.textContent = "ON";
+        wakeLock.addEventListener("release", () => {
+          wakeState.textContent = "OFF";
+        });
+      } else {
+        if (wakeLock) await wakeLock.release();
+        wakeLock = null;
+        wakeState.textContent = "OFF";
+      }
+    } catch {
+      wakeState.textContent = "失敗";
+    }
+  }
+
+  // Audio meter + alert
+  function setupAudioMeter(stream) {
+    const track = stream.getAudioTracks()[0];
+    if (!track) return;
+
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = audioCtx.createMediaStreamSource(stream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 2048;
+    src.connect(analyser);
+
+    const data = new Uint8Array(analyser.fftSize);
+
+    volTimer = setInterval(() => {
+      if (!analyser) return;
+      analyser.getByteTimeDomainData(data);
+
+      // RMS
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) {
+        const v = (data[i] - 128) / 128;
+        sum += v * v;
+      }
+      const rms = Math.sqrt(sum / data.length);
+      const level = Math.min(100, Math.max(0, Math.round(rms * 140))); // 体感調整
+      vuBar.style.width = level + "%";
+      vuText.textContent = String(level);
+
+      const thresh = Number(rngThresh.value);
+      const isLoud = level >= thresh;
+
+      if (isLoud) loudCount++;
+      else loudCount = Math.max(0, loudCount - 1);
+
+      // 連続で大きい音 → 送信
+      if (loudCount >= 8) {
+        loudCount = 0;
+        if (dataChannel && dataChannel.readyState === "open") {
+          dataChannel.send(JSON.stringify({ type: "LOUD", level, at: Date.now() }));
+        }
+      }
+    }, 200);
+  }
+
+  // events
+  btnStart.addEventListener("click", async () => {
+    try { await startStream(); } catch (e) { alert("カメラ/マイクの許可が必要です。"); }
+  });
+
+  btnStop.addEventListener("click", () => stopAll());
+
+  btnMakeOffer.addEventListener("click", async () => {
+    try { await makeOffer(); } catch (e) { alert("Offer作成に失敗しました。"); }
+  });
+
+  btnCopyOffer.addEventListener("click", async () => {
+    await copyText(txtOffer);
+  });
+
+  btnConnect.addEventListener("click", async () => {
+    try { await connectWithAnswer(); } catch (e) { alert("接続に失敗しました。"); }
+  });
+
+  chkWake.addEventListener("change", async (e) => {
+    await setWakeLock(e.target.checked);
+  });
+
+  // ページ離脱時に停止
+  window.addEventListener("beforeunload", () => stopAll());
+})();
+</script>
+</body>
+</html>
